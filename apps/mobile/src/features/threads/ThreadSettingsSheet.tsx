@@ -7,7 +7,7 @@ import type {
 } from "@t3tools/contracts";
 import { getProviderOptionCurrentValue } from "@t3tools/shared/model";
 import * as Haptics from "expo-haptics";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Switch, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -227,9 +227,9 @@ function SwitchRow(props: {
 /**
  * Unified thread settings: one bottom sheet holding the provider-grouped
  * model list (primary harnesses expanded, other providers folded, legacy
- * models behind a top toggle), the selected model's provider options, runtime
- * mode, and plan mode. Picking a model dismisses the sheet; every other
- * control keeps it open.
+ * models behind the top-right pill), the selected model's provider options,
+ * and runtime mode. Picking a model dismisses the sheet; every other control
+ * keeps it open.
  *
  * Rendered through an RN Modal (not the root OverlayPortal) so it also
  * presents above natively-presented form sheets like the new-task draft.
@@ -246,13 +246,21 @@ export function ThreadSettingsSheet(props: {
   readonly onUpdateOptionSelections: (selections: ReadonlyArray<ProviderOptionSelection>) => void;
   readonly runtimeMode: RuntimeMode;
   readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
-  readonly interactionMode: ProviderInteractionMode;
-  readonly onUpdateInteractionMode: (mode: ProviderInteractionMode) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [showLegacyToggle, setShowLegacyToggle] = useState(false);
   const [expandedProviders, setExpandedProviders] = useState<ReadonlySet<string>>(() => new Set());
+
+  // Every open starts from the compact view: legacy hidden, secondary
+  // providers folded. The sheet stays mounted between opens, so state would
+  // otherwise stick around.
+  useEffect(() => {
+    if (props.visible) {
+      setShowLegacyToggle(false);
+      setExpandedProviders(new Set());
+    }
+  }, [props.visible]);
 
   const isSelected = (option: ModelOption) =>
     option.selection.instanceId === props.selectedModel?.instanceId &&
@@ -321,6 +329,23 @@ export function ThreadSettingsSheet(props: {
           >
             <View className="h-1 w-9 rounded-full bg-subtle-strong" />
           </Pressable>
+          {hasLegacyModels ? (
+            <View className="flex-row justify-end px-4 pb-1.5">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: showLegacy }}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  setShowLegacyToggle(!showLegacy);
+                }}
+                className="rounded-full border border-border bg-subtle px-3 py-1.5 active:opacity-70"
+              >
+                <Text className="text-2xs font-t3-medium text-foreground-muted">
+                  {showLegacy ? "Hide legacy models" : "Show legacy models"}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {/* Only the model list scrolls. Provider catalogs can run to hundreds
               of models (OpenRouter), so the settings below stay pinned and
               reachable instead of living at the end of that scroll. */}
@@ -410,21 +435,6 @@ export function ThreadSettingsSheet(props: {
               selectedId={props.runtimeMode}
               onSelect={props.onUpdateRuntimeMode}
             />
-
-            <View className="pt-2">
-              <SwitchRow
-                label="Plan mode"
-                value={props.interactionMode === "plan"}
-                onValueChange={(value) => props.onUpdateInteractionMode(value ? "plan" : "default")}
-              />
-              {hasLegacyModels ? (
-                <SwitchRow
-                  label="Show legacy models"
-                  value={showLegacy}
-                  onValueChange={setShowLegacyToggle}
-                />
-              ) : null}
-            </View>
           </ScrollView>
         </View>
       </View>

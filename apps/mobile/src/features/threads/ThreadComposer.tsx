@@ -843,8 +843,6 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
         }
         runtimeMode={currentRuntimeMode}
         onUpdateRuntimeMode={props.onUpdateRuntimeMode}
-        interactionMode={currentInteractionMode}
-        onUpdateInteractionMode={props.onUpdateInteractionMode}
       />
 
       <ImageViewing
