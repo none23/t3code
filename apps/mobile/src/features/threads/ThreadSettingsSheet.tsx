@@ -243,9 +243,7 @@ export function ThreadSettingsSheet(props: {
   readonly selectedModel: ModelSelection | null;
   readonly onSelectModel: (option: ModelOption) => void;
   readonly optionDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
-  readonly onUpdateOptionSelections: (
-    selections: ReadonlyArray<ProviderOptionSelection>,
-  ) => void;
+  readonly onUpdateOptionSelections: (selections: ReadonlyArray<ProviderOptionSelection>) => void;
   readonly runtimeMode: RuntimeMode;
   readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
   readonly interactionMode: ProviderInteractionMode;
@@ -370,7 +368,15 @@ export function ThreadSettingsSheet(props: {
 
           <View className="mx-5 h-px bg-border" />
 
-          <View style={{ paddingBottom: insets.bottom + 12 }}>
+          {/* Normally fits without scrolling, but a model advertising many
+              option descriptors could outgrow the sheet; the smaller
+              flexShrink keeps the model list absorbing most of the squeeze. */}
+          <ScrollView
+            style={{ flexShrink: 0.25 }}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+          >
             {props.optionDescriptors.map((descriptor) => {
               if (descriptor.type === "select") {
                 const currentValue = getProviderOptionCurrentValue(descriptor);
@@ -409,9 +415,7 @@ export function ThreadSettingsSheet(props: {
               <SwitchRow
                 label="Plan mode"
                 value={props.interactionMode === "plan"}
-                onValueChange={(value) =>
-                  props.onUpdateInteractionMode(value ? "plan" : "default")
-                }
+                onValueChange={(value) => props.onUpdateInteractionMode(value ? "plan" : "default")}
               />
               {hasLegacyModels ? (
                 <SwitchRow
@@ -421,7 +425,7 @@ export function ThreadSettingsSheet(props: {
                 />
               ) : null}
             </View>
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>

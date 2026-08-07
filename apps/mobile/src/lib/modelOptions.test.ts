@@ -2,7 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { ProviderInstanceId, type ServerConfig } from "@t3tools/contracts";
 
-import { buildModelOptions, groupByProvider, resolveSelectableModelSelection } from "./modelOptions";
+import {
+  buildModelOptions,
+  groupByProvider,
+  resolveSelectableModelSelection,
+} from "./modelOptions";
 
 describe("mobile model options", () => {
   it("groups models by provider and flags legacy entries", () => {
