@@ -372,6 +372,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          lastViewedAt: command.createdAt,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -441,6 +442,53 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.mark-viewed": {
+      const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+      const occurredAt = yield* nowIso;
+      const completedAt = thread.latestTurn?.completedAt;
+      const lastViewedAt =
+        completedAt != null && Date.parse(completedAt) > Date.parse(occurredAt)
+          ? completedAt
+          : occurredAt;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.view-status-updated",
+        payload: { threadId: command.threadId, lastViewedAt },
+      };
+    }
+
+    case "thread.mark-unread": {
+      const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+      const completedAt = thread.latestTurn?.completedAt;
+      if (completedAt == null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `thread ${command.threadId} has no completed turn to mark unread`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.view-status-updated",
+        payload: {
+          threadId: command.threadId,
+          lastViewedAt: DateTime.formatIso(
+            DateTime.subtract(DateTime.makeUnsafe(completedAt), { milliseconds: 1 }),
+          ),
         },
       };
     }

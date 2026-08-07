@@ -87,9 +87,12 @@ export async function archiveSelectedThreadEntries<
 export function buildMultiSelectThreadContextMenuItems(input: {
   count: number;
   hasRunningThread: boolean;
+  canMarkUnread: boolean;
 }): readonly ContextMenuItem<"mark-unread" | "archive" | "delete">[] {
   return [
-    { id: "mark-unread", label: `Mark unread (${input.count})` },
+    ...(input.canMarkUnread
+      ? [{ id: "mark-unread" as const, label: `Mark unread (${input.count})` }]
+      : []),
     {
       id: "archive",
       label: `Archive (${input.count})`,
@@ -154,7 +157,7 @@ type ThreadStatusInput = Pick<
   | "session"
   | "backgroundLiveness"
 > & {
-  lastVisitedAt?: string | undefined;
+  lastViewedAt?: string | null | undefined;
 };
 
 export interface ThreadJumpHintVisibilityController {
@@ -253,11 +256,11 @@ export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   if (!thread.latestTurn?.completedAt) return false;
   const completedAt = Date.parse(thread.latestTurn.completedAt);
   if (Number.isNaN(completedAt)) return false;
-  if (!thread.lastVisitedAt) return false;
+  if (!thread.lastViewedAt) return false;
 
-  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
-  if (Number.isNaN(lastVisitedAt)) return true;
-  return completedAt > lastVisitedAt;
+  const lastViewedAt = Date.parse(thread.lastViewedAt);
+  if (Number.isNaN(lastViewedAt)) return true;
+  return completedAt > lastViewedAt;
 }
 
 export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {

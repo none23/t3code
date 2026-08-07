@@ -109,7 +109,7 @@ import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
-import { useProjects, useThreadShells } from "../state/entities";
+import { readEnvironmentSupportsViewStatus, useProjects, useThreadShells } from "../state/entities";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
@@ -509,7 +509,6 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   );
   const threadKey = scopedThreadKey(threadRef);
   const isRegeneratingTitle = thread.titleRegeneration != null;
-  const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const isSelected = useThreadSelectionStore((state) => state.selectedThreadKeys.has(threadKey));
   const openPrLink = useOpenPrLink();
   const runningTerminalIds = useThreadRunningTerminalIds({
@@ -534,9 +533,9 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   });
   const prState = pr?.state ?? null;
 
-  // Same semantics as v1 (never-visited counts as read): flipping the beta
-  // flag must not light up every historical thread as unread.
-  const isUnread = hasUnseenCompletion({ ...thread, lastVisitedAt });
+  // Missing server state counts as read so upgrading does not light up every
+  // historical thread as unread.
+  const isUnread = hasUnseenCompletion(thread);
   const status = resolveSidebarV2Status(thread);
   // A woken thread reappears at its original position (the sort is
   // deliberately static), so the pill has to carry the weight. Snoozing is
@@ -544,13 +543,14 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   // reading a completion-triggered wake, clicking the pill, sending a
   // message, settling, archiving — or finishing the work outright (merged
   // or closed PR). Timer wakes survive a mere visit. An unparseable visit
-  // timestamp counts as never-visited — corrupt local data must not eat
+  // timestamp counts as never-viewed — corrupt server data must not eat
   // the wake signal.
-  const lastVisitedDate = lastVisitedAt === undefined ? null : parseTimestampDate(lastVisitedAt);
+  const lastViewedDate =
+    thread.lastViewedAt == null ? null : parseTimestampDate(thread.lastViewedAt);
   const wokeAtDate = props.wokeAt === null ? null : parseTimestampDate(props.wokeAt);
   const isWoke =
     wokeAtDate !== null &&
-    (lastVisitedDate === null || lastVisitedDate < wokeAtDate) &&
+    (lastViewedDate === null || lastViewedDate < wokeAtDate) &&
     prState !== "merged" &&
     prState !== "closed";
   // In-flight rows (working, or waiting on approval/input) fade as a whole:
@@ -1438,13 +1438,21 @@ export default function SidebarV2() {
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
-  const markThreadUnread = useUiStateStore((s) => s.markThreadUnread);
-  const markThreadVisited = useUiStateStore((s) => s.markThreadVisited);
+  const markThreadUnread = useAtomCommand(threadEnvironment.markUnread, {
+    reportFailure: false,
+  });
+  const markThreadViewed = useAtomCommand(threadEnvironment.markViewed, {
+    reportFailure: false,
+  });
   const acknowledgeWoke = useCallback(
-    (threadRef: ScopedThreadRef, visitedAt: string) => {
-      markThreadVisited(scopedThreadKey(threadRef), visitedAt);
+    (threadRef: ScopedThreadRef, _visitedAt: string) => {
+      if (!readEnvironmentSupportsViewStatus(threadRef.environmentId)) return;
+      void markThreadViewed({
+        environmentId: threadRef.environmentId,
+        input: { threadId: threadRef.threadId },
+      });
     },
-    [markThreadVisited],
+    [markThreadViewed],
   );
   const routeTarget = useParams({
     strict: false,
@@ -2529,6 +2537,11 @@ export default function SidebarV2() {
       const regeneratableTitleThreads = titleRegenerationThreads.filter(
         (thread) => thread.titleRegeneration == null,
       );
+      const viewStatusThreads = selectedThreads.filter(
+        (thread) =>
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadViewStatus ===
+          true,
+      );
       const titleRegenerationMenuItem = buildBulkTitleRegenerationContextMenuItem({
         supportedCount: titleRegenerationThreads.length,
         actionableCount: regeneratableTitleThreads.length,
@@ -2551,7 +2564,9 @@ export default function SidebarV2() {
                 ]
               : []),
             ...(titleRegenerationMenuItem ? [titleRegenerationMenuItem] : []),
-            { id: "mark-unread", label: `Mark unread (${count})` },
+            ...(viewStatusThreads.length > 0
+              ? [{ id: "mark-unread", label: `Mark unread (${viewStatusThreads.length})` }]
+              : []),
             { id: "delete", label: `Delete (${count})`, destructive: true },
           ],
           position,
@@ -2656,9 +2671,11 @@ export default function SidebarV2() {
         return;
       }
       if (clicked.value === "mark-unread") {
-        for (const threadKey of threadKeys) {
-          const thread = threadByKeyRef.current.get(threadKey);
-          markThreadUnread(threadKey, thread?.latestTurn?.completedAt);
+        for (const thread of viewStatusThreads) {
+          void markThreadUnread({
+            environmentId: thread.environmentId,
+            input: { threadId: thread.id },
+          });
         }
         clearSelection();
         return;
@@ -2750,6 +2767,9 @@ export default function SidebarV2() {
         const supportsTitleRegeneration =
           serverConfigs.get(thread.environmentId)?.environment.capabilities
             .threadTitleRegeneration === true;
+        const supportsViewStatus =
+          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadViewStatus ===
+          true;
         const isRegeneratingTitle = thread.titleRegeneration != null;
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
@@ -2770,6 +2790,7 @@ export default function SidebarV2() {
                 snooze: supportsSnooze,
                 pinning: supportsPinning,
                 titleRegeneration: supportsTitleRegeneration,
+                viewStatus: supportsViewStatus,
               },
               snoozePresets,
             }),
@@ -2845,7 +2866,10 @@ export default function SidebarV2() {
             return;
           }
           case "mark-unread":
-            markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+            void markThreadUnread({
+              environmentId: thread.environmentId,
+              input: { threadId: thread.id },
+            });
             return;
           case "copy-path":
             if (!threadWorkspacePath) {

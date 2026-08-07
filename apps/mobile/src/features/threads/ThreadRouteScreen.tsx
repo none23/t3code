@@ -63,6 +63,7 @@ import { useSelectedThreadRequests } from "../../state/use-selected-thread-reque
 import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
 import { useThreadComposerState } from "../../state/use-thread-composer-state";
 import { threadEnvironment } from "../../state/threads";
+import { useEnvironmentServerConfig } from "../../state/entities";
 import { projectThreadContentPresentation } from "./threadContentPresentation";
 import {
   useAdaptiveWorkspaceLayout,
@@ -214,6 +215,25 @@ function ThreadRouteContent(
   const gitActions = useSelectedThreadGitActions();
   const requests = useSelectedThreadRequests();
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, "thread interrupt");
+  const markThreadViewed = useAtomCommand(threadEnvironment.markViewed, { reportFailure: false });
+  const selectedServerConfig = useEnvironmentServerConfig(selectedThread?.environmentId ?? null);
+  useEffect(() => {
+    if (
+      selectedThread?.latestTurn?.completedAt == null ||
+      selectedServerConfig?.environment.capabilities.threadViewStatus !== true
+    )
+      return;
+    void markThreadViewed({
+      environmentId: selectedThread.environmentId,
+      input: { threadId: selectedThread.id },
+    });
+  }, [
+    markThreadViewed,
+    selectedServerConfig?.environment.capabilities.threadViewStatus,
+    selectedThread?.environmentId,
+    selectedThread?.id,
+    selectedThread?.latestTurn?.completedAt,
+  ]);
   const navigation = useNavigation();
   const params = props.route.params;
   const environmentIdRaw = firstRouteParam(params.environmentId);
