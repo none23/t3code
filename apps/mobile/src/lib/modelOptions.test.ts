@@ -2,15 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { ProviderInstanceId, type ServerConfig } from "@t3tools/contracts";
 
-import {
-  buildModelMenuActions,
-  buildModelOptions,
-  groupByProvider,
-  resolveSelectableModelSelection,
-} from "./modelOptions";
+import { buildModelOptions, groupByProvider, resolveSelectableModelSelection } from "./modelOptions";
 
 describe("mobile model options", () => {
-  it("folds legacy models into a provider-scoped menu", () => {
+  it("groups models by provider and flags legacy entries", () => {
     const config = {
       providers: [
         {
@@ -39,51 +34,14 @@ describe("mobile model options", () => {
       ],
     } as unknown as ServerConfig;
 
-    const actions = buildModelMenuActions(groupByProvider(buildModelOptions(config, null)), null);
-
-    expect(actions).toMatchObject([
+    expect(groupByProvider(buildModelOptions(config, null))).toMatchObject([
       {
-        title: "Codex",
-        subactions: [{ id: "model:codex:gpt-5.6-sol", title: "GPT-5.6 Sol" }],
-      },
-      {
-        id: "legacy-models:codex",
-        title: "Codex legacy models",
-        subactions: [{ id: "model:codex:gpt-5.4", title: "GPT-5.4" }],
-      },
-    ]);
-  });
-
-  it("omits an empty provider menu when every model is legacy", () => {
-    const config = {
-      providers: [
-        {
-          instanceId: "codex",
-          driver: "codex",
-          displayName: "Codex",
-          enabled: true,
-          installed: true,
-          auth: { status: "authenticated" },
-          models: [
-            {
-              slug: "gpt-5.4",
-              name: "GPT-5.4",
-              isCustom: false,
-              isLegacy: true,
-              capabilities: null,
-            },
-          ],
-        },
-      ],
-    } as unknown as ServerConfig;
-
-    expect(
-      buildModelMenuActions(groupByProvider(buildModelOptions(config, null)), null),
-    ).toMatchObject([
-      {
-        id: "legacy-models:codex",
-        title: "Codex legacy models",
-        subactions: [{ id: "model:codex:gpt-5.4" }],
+        providerKey: "codex",
+        providerLabel: "Codex",
+        models: [
+          { key: "codex:gpt-5.6-sol", label: "GPT-5.6 Sol", isLegacy: false },
+          { key: "codex:gpt-5.4", label: "GPT-5.4", isLegacy: true },
+        ],
       },
     ]);
   });

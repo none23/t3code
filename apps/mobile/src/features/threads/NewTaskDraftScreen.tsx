@@ -1,7 +1,7 @@
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { StackActions, useNavigation, usePreventRemove } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, InteractionManager, Platform, View, useColorScheme } from "react-native";
+import { Alert, InteractionManager, Keyboard, Platform, View, useColorScheme } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
@@ -25,15 +25,11 @@ import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStri
 import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { ComposerSurface } from "./ThreadComposer";
+import { ThreadSettingsSheet, threadSettingsSummaryLabel } from "./ThreadSettingsSheet";
 
 import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
-import {
-  applyProviderOptionMenuEvent,
-  buildProviderOptionMenuActions,
-  providerOptionsConfigurationLabel,
-  resolveProviderOptionDescriptors,
-} from "../../lib/providerOptions";
+import { resolveProviderOptionDescriptors } from "../../lib/providerOptions";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import {
   clearComposerDraftContent,
@@ -43,7 +39,7 @@ import {
   type ComposerDraft,
 } from "../../state/use-composer-drafts";
 import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
-import { buildModelMenuActions, resolveSelectableModelSelection } from "../../lib/modelOptions";
+import { resolveSelectableModelSelection } from "../../lib/modelOptions";
 import { deriveThreadTitleFromPrompt } from "../../lib/projectThreadStartTurn";
 import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
 import { enqueueThreadOutboxMessage, removeThreadOutboxMessage } from "../../state/thread-outbox";
@@ -103,6 +99,7 @@ export function NewTaskDraftScreen(props: {
   const promptInputRef = useRef<ComposerEditorHandle>(null);
   const loadedBranchesProjectKeyRef = useRef<string | null>(null);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [isSettingsSheetVisible, setIsSettingsSheetVisible] = useState(false);
   const [importingShareKey, setImportingShareKey] = useState<string | null>(null);
   const [isCancellingShareImport, setIsCancellingShareImport] = useState(false);
   const [cancelledIncomingShareId, setCancelledIncomingShareId] = useState<string | null>(null);
@@ -544,10 +541,6 @@ export function NewTaskDraftScreen(props: {
     [flow.environments, flow.selectedEnvironmentId, isIncomingShareTransferPending],
   );
 
-  const modelMenuActions = useMemo(
-    () => buildModelMenuActions(flow.providerGroups, flow.selectedModel),
-    [flow.providerGroups, flow.selectedModel],
-  );
   const providerOptionDescriptors = useMemo(
     () =>
       resolveProviderOptionDescriptors({
@@ -555,54 +548,6 @@ export function NewTaskDraftScreen(props: {
         selections: flow.selectedModel?.options,
       }),
     [flow.selectedModel?.options, flow.selectedModelOption?.capabilities],
-  );
-
-  const optionsMenuActions = useMemo(
-    () => [
-      ...buildProviderOptionMenuActions(providerOptionDescriptors),
-      {
-        id: "options-runtime",
-        title: "Runtime",
-        subtitle:
-          flow.runtimeMode === "approval-required"
-            ? "Approve actions"
-            : flow.runtimeMode === "auto-accept-edits"
-              ? "Auto-accept edits"
-              : flow.runtimeMode === "auto"
-                ? "Auto"
-                : "Full access",
-        subactions: [
-          { id: "options:runtime:approval-required", title: "Approve actions" },
-          { id: "options:runtime:auto-accept-edits", title: "Auto-accept edits" },
-          { id: "options:runtime:auto", title: "Auto" },
-          { id: "options:runtime:full-access", title: "Full access" },
-        ].map((option) => {
-          const value = option.id.replace("options:runtime:", "");
-          return {
-            id: option.id,
-            title: option.title,
-            state: flow.runtimeMode === value ? ("on" as const) : undefined,
-          };
-        }),
-      },
-      {
-        id: "options-interaction",
-        title: "Interaction",
-        subtitle: flow.interactionMode === "plan" ? "Plan" : "Default",
-        subactions: [
-          { id: "options:interaction:default", title: "Default" },
-          { id: "options:interaction:plan", title: "Plan" },
-        ].map((option) => {
-          const value = option.id.replace("options:interaction:", "");
-          return {
-            id: option.id,
-            title: option.title,
-            state: flow.interactionMode === value ? ("on" as const) : undefined,
-          };
-        }),
-      },
-    ],
-    [flow.interactionMode, flow.runtimeMode, providerOptionDescriptors],
   );
 
   const workspaceMenuActions = useMemo(() => {
@@ -675,10 +620,12 @@ export function NewTaskDraftScreen(props: {
     flow.availableBranches.find((branch) => branch.current)?.name ??
     flow.availableBranches.find((branch) => branch.isDefault)?.name ??
     null;
-  const configurationLabel = useMemo(
-    () => providerOptionsConfigurationLabel(providerOptionDescriptors),
-    [providerOptionDescriptors],
-  );
+  const settingsSummaryLabel = threadSettingsSummaryLabel({
+    modelLabel: flow.selectedModelOption?.label ?? "Model",
+    optionDescriptors: providerOptionDescriptors,
+    runtimeMode: flow.runtimeMode,
+    interactionMode: flow.interactionMode,
+  });
   const workspaceLabel = useMemo(
     () =>
       formatWorkspaceLabel({
@@ -688,40 +635,22 @@ export function NewTaskDraftScreen(props: {
       }),
     [currentBranchName, flow.selectedBranchName, flow.workspaceMode],
   );
-  function handleModelMenuAction(event: string) {
-    if (isIncomingShareTransferPending || !event.startsWith("model:")) {
-      return;
-    }
-    flow.setSelectedModelKey(event.slice("model:".length));
-  }
+  // Order matters: mark the sheet open before dismissing the keyboard so the
+  // Android draft layout (expanded only while focused) doesn't collapse.
+  const openSettingsSheet = useCallback(() => {
+    setIsSettingsSheetVisible(true);
+    Keyboard.dismiss();
+  }, []);
+  const closeSettingsSheet = useCallback(() => {
+    setIsSettingsSheetVisible(false);
+    promptInputRef.current?.focus();
+  }, []);
 
   function handleEnvironmentMenuAction(event: string) {
     if (isIncomingShareTransferPending || !event.startsWith("environment:")) {
       return;
     }
     flow.selectEnvironment(EnvironmentId.make(event.slice("environment:".length)));
-  }
-
-  function handleOptionsMenuAction(event: string) {
-    if (isIncomingShareTransferPending) {
-      return;
-    }
-    const providerOptions = applyProviderOptionMenuEvent(providerOptionDescriptors, event);
-    if (providerOptions) {
-      flow.setSelectedModelOptions(providerOptions);
-      return;
-    }
-    if (event.startsWith("options:runtime:")) {
-      flow.setRuntimeMode(
-        event.slice("options:runtime:".length) as Parameters<typeof flow.setRuntimeMode>[0],
-      );
-      return;
-    }
-    if (event.startsWith("options:interaction:")) {
-      flow.setInteractionMode(
-        event.slice("options:interaction:".length) as Parameters<typeof flow.setInteractionMode>[0],
-      );
-    }
   }
 
   function handleWorkspaceMenuAction(event: string) {
@@ -930,7 +859,9 @@ export function NewTaskDraftScreen(props: {
   const isDarkMode = colorScheme === "dark";
   // Android expansion follows native editor focus so relayout cannot race
   // the touch gesture that opens the keyboard.
-  const isExpanded = !isAndroid || isComposerFocused;
+  // The settings sheet dismisses the keyboard, so its flag keeps the Android
+  // draft composer expanded through the blur (mirrors ThreadComposer).
+  const isExpanded = !isAndroid || isComposerFocused || isSettingsSheetVisible;
   const canStart =
     Boolean(flow.selectedProject) &&
     Boolean(flow.selectedModel) &&
@@ -984,28 +915,14 @@ export function NewTaskDraftScreen(props: {
         showChevron={false}
         disabled={isIncomingShareTransferPending}
       />
-      <ControlPillMenu
-        actions={modelMenuActions}
-        onPressAction={({ nativeEvent }) => handleModelMenuAction(nativeEvent.event)}
-      >
-        <ComposerToolbarTrigger
-          accessibilityLabel="Model"
-          disabled={isIncomingShareTransferPending}
-          iconNode={<ProviderIcon provider={flow.selectedModelOption?.providerDriver} size={16} />}
-          label={flow.selectedModelOption?.label ?? "Model"}
-        />
-      </ControlPillMenu>
-      <ControlPillMenu
-        actions={optionsMenuActions}
-        onPressAction={({ nativeEvent }) => handleOptionsMenuAction(nativeEvent.event)}
-      >
-        <ComposerToolbarTrigger
-          accessibilityLabel="Configuration"
-          disabled={isIncomingShareTransferPending}
-          icon="slider.horizontal.3"
-          label={configurationLabel}
-        />
-      </ControlPillMenu>
+      <ComposerToolbarTrigger
+        accessibilityLabel="Thread settings"
+        disabled={isIncomingShareTransferPending}
+        iconNode={<ProviderIcon provider={flow.selectedModelOption?.providerDriver} size={16} />}
+        label={settingsSummaryLabel}
+        maxWidth={320}
+        onPress={openSettingsSheet}
+      />
       <ControlPillMenu
         actions={environmentMenuActions}
         onPressAction={({ nativeEvent }) => handleEnvironmentMenuAction(nativeEvent.event)}
@@ -1029,6 +946,22 @@ export function NewTaskDraftScreen(props: {
         />
       </ControlPillMenu>
     </>
+  );
+
+  const settingsSheet = (
+    <ThreadSettingsSheet
+      visible={isSettingsSheetVisible}
+      onClose={closeSettingsSheet}
+      providerGroups={flow.providerGroups}
+      selectedModel={flow.selectedModel}
+      onSelectModel={(option) => flow.setSelectedModelKey(option.key)}
+      optionDescriptors={providerOptionDescriptors}
+      onUpdateOptionSelections={flow.setSelectedModelOptions}
+      runtimeMode={flow.runtimeMode}
+      onUpdateRuntimeMode={flow.setRuntimeMode}
+      interactionMode={flow.interactionMode}
+      onUpdateInteractionMode={flow.setInteractionMode}
+    />
   );
 
   const startButton = (
@@ -1120,6 +1053,7 @@ export function NewTaskDraftScreen(props: {
             ) : null}
           </View>
         </KeyboardAvoidingView>
+        {settingsSheet}
       </View>
     );
   }
@@ -1153,6 +1087,7 @@ export function NewTaskDraftScreen(props: {
           </ComposerToolbarRow>
         </View>
       </KeyboardAvoidingView>
+      {settingsSheet}
     </View>
   );
 }
