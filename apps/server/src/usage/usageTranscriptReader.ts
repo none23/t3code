@@ -1,0 +1,119 @@
+// @effect-diagnostics nodeBuiltinImport:off
+/**
+ * Raw filesystem access for transcript scanning.
+ *
+ * Isolated here so the rest of the usage code stays on Effect's `FileSystem`.
+ * The direct `node:fs` streaming is deliberate: a cold 30-day window is ~1.4 GB
+ * across ~1,500 files, and `readline` over a read stream is roughly an order of
+ * magnitude cheaper than materialising each file. The equivalent Effect stream
+ * pipeline is idiomatic but not fast enough to sit behind a page load.
+ *
+ * @module usageTranscriptReader
+ */
+import { createReadStream } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { join } from "node:path";
+
+import type { UsageProviderKind } from "@t3tools/contracts";
+
+import {
+  initialCodexScanState,
+  mightCarryUsage,
+  parseClaudeLine,
+  parseCodexLine,
+  type UsageRecord,
+} from "./usageTranscripts.ts";
+
+export interface TranscriptFile {
+  readonly path: string;
+  readonly size: number;
+  readonly mtimeMs: number;
+}
+
+/**
+ * Lists `.jsonl` transcripts under `root` last modified at or after `sinceMs`.
+ *
+ * Errors on individual entries are swallowed: session files rotate and get
+ * removed while the walk is in flight, and a partial listing is far better than
+ * failing the page.
+ */
+export async function listTranscriptFiles(
+  root: string,
+  sinceMs: number,
+): Promise<readonly TranscriptFile[]> {
+  const found: TranscriptFile[] = [];
+
+  const walk = async (dir: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const child = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(child);
+        continue;
+      }
+      if (!entry.name.endsWith(".jsonl")) continue;
+      try {
+        const stats = await stat(child);
+        if (stats.mtimeMs >= sinceMs) {
+          found.push({ path: child, size: stats.size, mtimeMs: stats.mtimeMs });
+        }
+      } catch {
+        // Vanished between readdir and stat.
+      }
+    }
+  };
+
+  await walk(root);
+  return found;
+}
+
+/**
+ * Streams one transcript and returns the usage records it contains.
+ *
+ * Codex carries the active model on `turn_context` lines that hold no usage of
+ * their own, so those still have to pass through the reducer to keep model
+ * attribution correct.
+ */
+export async function readTranscriptRecords(
+  filePath: string,
+  provider: UsageProviderKind,
+): Promise<readonly UsageRecord[]> {
+  const records: UsageRecord[] = [];
+  const codexState = initialCodexScanState();
+
+  try {
+    const lines = createInterface({
+      input: createReadStream(filePath, { encoding: "utf8" }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of lines) {
+      if (provider === "codex") {
+        if (
+          !mightCarryUsage(line, provider) &&
+          !line.includes('"turn_context"') &&
+          !line.includes('"session_meta"')
+        ) {
+          continue;
+        }
+        const record = parseCodexLine(line, codexState);
+        if (record !== null) records.push(record);
+        continue;
+      }
+
+      if (!mightCarryUsage(line, provider)) continue;
+      const record = parseClaudeLine(line);
+      if (record !== null) records.push(record);
+    }
+  } catch {
+    return [];
+  }
+
+  return records;
+}
