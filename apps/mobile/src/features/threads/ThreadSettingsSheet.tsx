@@ -462,11 +462,17 @@ export function ThreadSettingsSheet(props: {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ selected: showLegacy }}
+                    // Forced on while the highlighted model is legacy: hiding
+                    // it would strand the checkmark, so don't offer a no-op.
+                    disabled={displayedIsLegacy}
                     onPress={() => {
                       void Haptics.selectionAsync();
                       setShowLegacyToggle(!showLegacy);
                     }}
-                    className="rounded-full border border-border bg-subtle px-3 py-1.5 active:opacity-70"
+                    className={cn(
+                      "rounded-full border border-border bg-subtle px-3 py-1.5 active:opacity-70",
+                      displayedIsLegacy && "opacity-40",
+                    )}
                   >
                     <Text className="text-2xs font-t3-medium text-foreground-muted">
                       {showLegacy ? "Hide legacy models" : "Show legacy models"}
