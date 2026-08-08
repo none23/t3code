@@ -8,6 +8,7 @@ import { PROVIDER_COLOR, PROVIDER_LABEL, PROVIDER_ORDER } from "./usageProviders
 const VIEW_WIDTH = 960;
 const VIEW_HEIGHT = 260;
 const TICK_COUNT = 4;
+const PLOT_TOP = 8;
 
 export type UsageChartMetric = "tokens" | "cost";
 
@@ -104,16 +105,26 @@ function smoothSegments(points: readonly Point[], startCommand: "M" | "L"): stri
   return path;
 }
 
-/** Rounds a scale maximum up to a readable 1/2/5 x 10^n step. */
-function niceTicks(peak: number, count: number): readonly number[] {
-  if (peak <= 0) return [0];
+/**
+ * Builds a scale whose maximum is a readable 1/2/5 x 10^n step at or above the
+ * peak.
+ *
+ * Rounding the maximum *up* is the point: stopping at the last step below the
+ * peak leaves the tallest day drawn past the top of the plot, where it is
+ * clipped.
+ */
+export function niceScale(peak: number, count: number): { max: number; ticks: readonly number[] } {
+  if (peak <= 0) return { max: 0, ticks: [0] };
+
   const rawStep = peak / count;
   const magnitude = 10 ** Math.floor(Math.log10(rawStep));
   const normalized = rawStep / magnitude;
   const step = (normalized > 5 ? 10 : normalized > 2 ? 5 : normalized > 1 ? 2 : 1) * magnitude;
+
+  const max = Math.ceil(peak / step) * step;
   const ticks: number[] = [];
-  for (let value = 0; value <= peak + step * 0.001; value += step) ticks.push(value);
-  return ticks;
+  for (let value = 0; value <= max + step * 1e-6; value += step) ticks.push(value);
+  return { max, ticks };
 }
 
 export function UsageProviderChart({ days, daily, metric }: UsageProviderChartProps) {
@@ -121,9 +132,14 @@ export function UsageProviderChart({ days, daily, metric }: UsageProviderChartPr
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const plotRef = useRef<HTMLDivElement | null>(null);
 
-  const { paths, ticks, scaleMax, stepX } = useMemo(() => {
+  const { paths, ticks, stepX, toY } = useMemo(() => {
     if (days.length === 0) {
-      return { paths: [], ticks: [0] as readonly number[], scaleMax: 0, stepX: 0 };
+      return {
+        paths: [],
+        ticks: [0] as readonly number[],
+        stepX: 0,
+        toY: () => VIEW_HEIGHT,
+      };
     }
 
     const stacked = days.map((day) => {
@@ -140,11 +156,12 @@ export function UsageProviderChart({ days, daily, metric }: UsageProviderChartPr
       (max, columns) => Math.max(max, columns[columns.length - 1]?.top ?? 0),
       0,
     );
-    const tickValues = niceTicks(peak, TICK_COUNT);
-    const max = tickValues[tickValues.length - 1] ?? 0;
+    const { max, ticks: tickValues } = niceScale(peak, TICK_COUNT);
     const step = days.length === 1 ? 0 : VIEW_WIDTH / (days.length - 1);
+    // Reserve a sliver above the top gridline so the series stroke, which is
+    // drawn at constant screen width, is not shaved off at a peak.
     const toY = (value: number) =>
-      max === 0 ? VIEW_HEIGHT : VIEW_HEIGHT - (value / max) * VIEW_HEIGHT;
+      max === 0 ? VIEW_HEIGHT : VIEW_HEIGHT - (value / max) * (VIEW_HEIGHT - PLOT_TOP);
 
     const built = PROVIDER_ORDER.map((provider, providerIndex) => {
       const top: Point[] = stacked.map((columns, dayIndex) => ({
@@ -165,7 +182,7 @@ export function UsageProviderChart({ days, daily, metric }: UsageProviderChartPr
       };
     });
 
-    return { paths: built, ticks: tickValues, scaleMax: max, stepX: step };
+    return { paths: built, ticks: tickValues, stepX: step, toY };
   }, [byDay, days, metric]);
 
   const format = metric === "tokens" ? formatTokens : formatUsd;
@@ -194,7 +211,7 @@ export function UsageProviderChart({ days, daily, metric }: UsageProviderChartPr
             <span
               key={tick}
               className="absolute right-0 -translate-y-1/2 text-[10px] text-muted-foreground tabular-nums"
-              style={{ top: `${scaleMax === 0 ? 100 : (1 - tick / scaleMax) * 100}%` }}
+              style={{ top: `${(toY(tick) / VIEW_HEIGHT) * 100}%` }}
             >
               {tick === 0 ? "0" : format(tick)}
             </span>
@@ -215,8 +232,7 @@ export function UsageProviderChart({ days, daily, metric }: UsageProviderChartPr
             aria-label={`Daily ${metric === "tokens" ? "processed tokens" : "cost"} by provider`}
           >
             {ticks.map((tick) => {
-              const y =
-                scaleMax === 0 ? VIEW_HEIGHT : VIEW_HEIGHT - (tick / scaleMax) * VIEW_HEIGHT;
+              const y = toY(tick);
               return (
                 <line
                   key={tick}
@@ -249,7 +265,7 @@ export function UsageProviderChart({ days, daily, metric }: UsageProviderChartPr
               <line
                 x1={hoverIndex * stepX}
                 x2={hoverIndex * stepX}
-                y1={0}
+                y1={PLOT_TOP}
                 y2={VIEW_HEIGHT}
                 stroke="currentColor"
                 strokeWidth={1}
