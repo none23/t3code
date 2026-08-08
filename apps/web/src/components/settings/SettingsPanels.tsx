@@ -481,6 +481,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.fontFamilyTerminal !== DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal
         ? ["Terminal font"]
         : []),
+      ...(Object.keys(settings.terminalKeyCodeOverrides).length > 0
+        ? ["Terminal key code overrides"]
+        : []),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
         ? ["Diff whitespace changes"]
         : []),
@@ -525,6 +528,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.fontFamilyComposer,
       settings.fontFamilySans,
       settings.fontFamilyTerminal,
+      settings.terminalKeyCodeOverrides,
       settings.fontSizeCode,
       settings.fontSizeInterface,
       settings.fontSizePrompt,
@@ -628,6 +632,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
       fontFamilyCode: DEFAULT_UNIFIED_SETTINGS.fontFamilyCode,
       fontFamilyTerminal: DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal,
+      terminalKeyCodeOverrides: DEFAULT_UNIFIED_SETTINGS.terminalKeyCodeOverrides,
     });
     onRestored?.();
   }, [

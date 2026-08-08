@@ -31,6 +31,7 @@ const clientSettings: ClientSettings = {
   glassOpacity: 80,
   planModeEnabled: false,
   providerModelPreferences: {},
+  terminalKeyCodeOverrides: { CapsLock: "Escape" },
   sidebarAutoSettleAfterDays: 3,
   sidebarProjectGroupingMode: "repository_path",
   sidebarProjectGroupingOverrides: {

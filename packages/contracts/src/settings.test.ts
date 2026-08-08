@@ -33,6 +33,23 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings terminal key code overrides", () => {
+  it("defaults to no overrides", () => {
+    expect(decodeClientSettings({}).terminalKeyCodeOverrides).toEqual({});
+  });
+
+  it("accepts physical-to-terminal key code mappings", () => {
+    const terminalKeyCodeOverrides = { CapsLock: "Escape" };
+
+    expect(decodeClientSettings({ terminalKeyCodeOverrides }).terminalKeyCodeOverrides).toEqual(
+      terminalKeyCodeOverrides,
+    );
+    expect(
+      decodeClientSettingsPatch({ terminalKeyCodeOverrides }).terminalKeyCodeOverrides,
+    ).toEqual(terminalKeyCodeOverrides);
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

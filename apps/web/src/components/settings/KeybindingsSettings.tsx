@@ -27,6 +27,7 @@ import {
   type ServerRemoveKeybindingInput,
   type ServerUpsertKeybindingInput,
 } from "@t3tools/contracts";
+import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { useAtomValue } from "@effect/atom-react";
 import {
   isAtomCommandInterrupted,
@@ -45,6 +46,7 @@ import {
 } from "../../state/server";
 import { usePrimaryEnvironment } from "../../state/environments";
 import { Button } from "../ui/button";
+import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import { Kbd, KbdGroup } from "../ui/kbd";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -69,10 +71,20 @@ import {
   unknownWhenVariables,
   whenAstToExpression,
 } from "./KeybindingsSettings.logic";
-import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
+import {
+  SettingResetButton,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+} from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import {
+  formatTerminalKeyCodeOverrides,
+  parseTerminalKeyCodeOverrides,
+} from "../../terminal/ghostty/keyCodeOverrides";
 
 function KeybindingPill({ value }: { value: string }) {
   const parts = value.split("+");
@@ -1082,6 +1094,54 @@ function NewKeybindingTableRow({
   );
 }
 
+function TerminalKeyCodeOverridesSection() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+
+  return (
+    <SettingsSection title="Terminal keyboard">
+      <SettingsRow
+        {...searchableSetting("terminal-key-code-overrides")}
+        description="Remap physical key codes before terminal encoding. Separate multiple mappings with commas, for example CapsLock=Escape."
+        resetAction={
+          Object.keys(settings.terminalKeyCodeOverrides).length > 0 ? (
+            <SettingResetButton
+              label="terminal key code overrides"
+              onClick={() =>
+                updateSettings({
+                  terminalKeyCodeOverrides: DEFAULT_UNIFIED_SETTINGS.terminalKeyCodeOverrides,
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <DraftInput
+            aria-label="Terminal key code overrides"
+            autoCapitalize="none"
+            className="w-full font-mono sm:w-80"
+            placeholder="CapsLock=Escape"
+            spellCheck={false}
+            value={formatTerminalKeyCodeOverrides(settings.terminalKeyCodeOverrides)}
+            onCommit={(value) => {
+              const parsed = parseTerminalKeyCodeOverrides(value);
+              if (!parsed.ok) {
+                toastManager.add({
+                  title: "Invalid terminal key code override",
+                  description: parsed.message,
+                  type: "error",
+                });
+                return;
+              }
+              updateSettings({ terminalKeyCodeOverrides: parsed.overrides });
+            }}
+          />
+        }
+      />
+    </SettingsSection>
+  );
+}
+
 export function KeybindingsSettingsPanel() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const keybindingsConfigPath = useAtomValue(primaryServerKeybindingsConfigPathAtom);
@@ -1230,6 +1290,7 @@ export function KeybindingsSettingsPanel() {
 
   return (
     <SettingsPageContainer className="max-w-5xl">
+      <TerminalKeyCodeOverridesSection />
       <SettingsSection
         {...searchableSetting("keybindings")}
         headerAction={

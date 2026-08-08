@@ -83,3 +83,14 @@ Examples:
 - For a key event, the last rule where both `key` matches and `when` evaluates to `true` wins.
 - Precedence is across commands, not only within the same command. A later rule for a different
   command can take a key away from an earlier one.
+
+## Terminal key code overrides
+
+The terminal in the desktop and web clients normally identifies keys by their physical key code.
+This keeps the existing behavior stable across keyboard layouts, but some system-level remaps
+change the logical key while leaving that physical code unchanged.
+
+Use **Settings** → **Keybindings** → **Terminal key code overrides** to remap a physical code before
+it reaches the terminal. Enter mappings as `PhysicalCode=TerminalCode`, separated by commas. For
+example, `CapsLock=Escape` makes a system-remapped Caps Lock key send Escape. Leave the setting empty
+for the default behavior.

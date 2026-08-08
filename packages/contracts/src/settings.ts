@@ -110,6 +110,10 @@ export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationM
 export const FontFamilyPreference = Schema.String.check(Schema.isMaxLength(200));
 export type FontFamilyPreference = typeof FontFamilyPreference.Type;
 
+/** Physical key codes remapped before terminal keyboard encoding. */
+export const TerminalKeyCodeOverrides = Schema.Record(TrimmedNonEmptyString, TrimmedNonEmptyString);
+export type TerminalKeyCodeOverrides = typeof TerminalKeyCodeOverrides.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -139,6 +143,9 @@ export const ClientSettingsSchema = Schema.Struct({
   fontFamilyComposer: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontFamilySans: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontFamilyTerminal: FontFamilyPreference.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  terminalKeyCodeOverrides: TerminalKeyCodeOverrides.pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   // Grayscale `-webkit-font-smoothing: antialiased` (thinner strokes);
   // disabling restores the platform's heavier default. No effect off macOS.
   fontSmoothing: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -766,6 +773,7 @@ export const ClientSettingsPatch = Schema.Struct({
   fontFamilyComposer: Schema.optionalKey(FontFamilyPreference),
   fontFamilySans: Schema.optionalKey(FontFamilyPreference),
   fontFamilyTerminal: Schema.optionalKey(FontFamilyPreference),
+  terminalKeyCodeOverrides: Schema.optionalKey(TerminalKeyCodeOverrides),
   fontSmoothing: Schema.optionalKey(Schema.Boolean),
   favorites: Schema.optionalKey(
     Schema.Array(

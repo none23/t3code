@@ -170,6 +170,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "terminal-key-code-overrides",
+    title: "Terminal key code overrides",
+    to: "/settings/keybindings",
+  },
+  {
     id: "keybindings",
     title: "Keybindings",
     to: "/settings/keybindings",

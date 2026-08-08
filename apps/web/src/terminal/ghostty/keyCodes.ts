@@ -184,6 +184,18 @@ const codeToGhosttyKey = new Map<string, number>(
   ghosttyKeyboardCodes.map((code, index) => [code, index]),
 );
 
+export function isGhosttyKeyboardCode(code: string): boolean {
+  return codeToGhosttyKey.has(code);
+}
+
+export function resolveTerminalKeyCode(
+  code: string,
+  overrides: Readonly<Record<string, string>>,
+): string {
+  const override = Object.hasOwn(overrides, code) ? overrides[code] : undefined;
+  return override !== undefined && isGhosttyKeyboardCode(override) ? override : code;
+}
+
 export function ghosttyKeyForCode(code: string): number {
   return codeToGhosttyKey.get(code) ?? 0;
 }

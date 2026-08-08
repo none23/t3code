@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ghosttyKeyForCode, ghosttyUnshiftedCodepoint } from "./keyCodes";
+import { ghosttyKeyForCode, ghosttyUnshiftedCodepoint, resolveTerminalKeyCode } from "./keyCodes";
 
 describe("ghosttyKeyForCode", () => {
   it("keeps the tail of the pinned Ghostty key enum in order", () => {
@@ -8,6 +8,12 @@ describe("ghosttyKeyForCode", () => {
     expect(ghosttyKeyForCode("PrintScreen")).toBe(ghosttyKeyForCode("FnLock") + 1);
     expect(ghosttyKeyForCode("Pause")).toBe(ghosttyKeyForCode("ScrollLock") + 1);
     expect(ghosttyKeyForCode("Paste")).toBe(ghosttyKeyForCode("Cut") + 1);
+  });
+
+  it("resolves configured physical key overrides and ignores invalid targets", () => {
+    expect(resolveTerminalKeyCode("CapsLock", { CapsLock: "Escape" })).toBe("Escape");
+    expect(resolveTerminalKeyCode("CapsLock", { CapsLock: "NotAKey" })).toBe("CapsLock");
+    expect(resolveTerminalKeyCode("Escape", {})).toBe("Escape");
   });
 });
 

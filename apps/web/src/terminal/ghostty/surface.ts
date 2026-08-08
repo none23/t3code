@@ -465,6 +465,7 @@ export interface GhosttyTerminalSurfaceOptions {
   readonly onSelectionChange: () => void;
   readonly onCopy: (text: string) => void;
   readonly beforeKey: (event: KeyboardEvent) => boolean;
+  readonly getKeyCodeOverrides?: () => Readonly<Record<string, string>>;
   readonly onLinkActivate: (text: string, event: MouseEvent) => void;
 }
 
@@ -934,7 +935,7 @@ export class GhosttyTerminalSurface {
     if (event.isComposing || this.composing || event.key === "Process" || event.keyCode === 229) {
       return;
     }
-    const data = this.core.encodeKey(event);
+    const data = this.core.encodeKey(event, "press", this.options.getKeyCodeOverrides?.());
     if (data.length === 0) return;
     this.suppressedKeyCodes.delete(event.code);
     event.preventDefault();
@@ -950,7 +951,7 @@ export class GhosttyTerminalSurface {
     }
     // Ghostty's encoder only emits release codes when the terminal enabled the
     // Kitty report-event-types flag, so legacy sessions send nothing here.
-    const data = this.core.encodeKey(event, "release");
+    const data = this.core.encodeKey(event, "release", this.options.getKeyCodeOverrides?.());
     if (data.length === 0) return;
     event.preventDefault();
     event.stopPropagation();
