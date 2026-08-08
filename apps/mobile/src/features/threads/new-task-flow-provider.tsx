@@ -147,7 +147,10 @@ type NewTaskFlowContextValue = {
   readonly reset: () => void;
   readonly setProject: (project: EnvironmentProject) => void;
   readonly selectEnvironment: (environmentId: EnvironmentId) => void;
-  readonly setSelectedModelKey: (key: string | null) => void;
+  readonly setSelectedModelKey: (
+    key: string | null,
+    options?: ReadonlyArray<ProviderOptionSelection>,
+  ) => void;
   readonly setWorkspaceMode: (mode: WorkspaceMode) => void;
   readonly selectBranch: (branch: VcsRef) => void;
   readonly setStartFromOrigin: (value: boolean) => void;
@@ -404,7 +407,9 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     [selectedEnvironmentServerConfig, selectedModel?.instanceId],
   );
   const setSelectedModelKey = useCallback(
-    (key: string | null) => {
+    // Options ride along in the same write: a follow-up setSelectedModelOptions
+    // call would rebuild the selection from the stale pre-switch model.
+    (key: string | null, options?: ReadonlyArray<ProviderOptionSelection>) => {
       if (!key || !selectedProjectDraftKey) {
         return;
       }
@@ -413,7 +418,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         return;
       }
       updateComposerDraftSettings(selectedProjectDraftKey, {
-        modelSelection: option.selection,
+        modelSelection: options ? { ...option.selection, options } : option.selection,
       });
     },
     [modelOptions, selectedProjectDraftKey],

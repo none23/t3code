@@ -954,7 +954,7 @@ export function NewTaskDraftScreen(props: {
       onClose={closeSettingsSheet}
       providerGroups={flow.providerGroups}
       selectedModel={flow.selectedModel}
-      onSelectModel={(option) => flow.setSelectedModelKey(option.key)}
+      onSelectModel={(option) => flow.setSelectedModelKey(option.key, option.selection.options)}
       optionDescriptors={providerOptionDescriptors}
       onUpdateOptionSelections={flow.setSelectedModelOptions}
       runtimeMode={flow.runtimeMode}
