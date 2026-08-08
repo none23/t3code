@@ -77,6 +77,12 @@ export const UsageBucket = Schema.Struct({
   model: TrimmedNonEmptyString,
   totals: UsageTokenTotals,
   costUsd: Schema.Number,
+  /**
+   * What the cached input would have cost at full input rates minus what it
+   * actually cost. Requires the rate table, so it is computed alongside cost
+   * rather than derived on the client.
+   */
+  cacheSavingsUsd: Schema.Number,
   costSource: UsageCostSource,
   /** Distinct assistant responses, after de-duplication. */
   records: NonNegativeInt,
