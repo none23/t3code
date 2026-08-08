@@ -622,13 +622,18 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
 
   // Order matters: mark the sheet open before dismissing the keyboard so
   // isExpanded stays true through the blur and the composer doesn't collapse.
+  // The keyboard only comes back on close if it was up when the sheet opened.
+  const wasFocusedBeforeSheetRef = useRef(false);
   const openSettingsSheet = useCallback(() => {
+    wasFocusedBeforeSheetRef.current = isFocused;
     setIsSettingsSheetVisible(true);
     Keyboard.dismiss();
-  }, []);
+  }, [isFocused]);
   const closeSettingsSheet = useCallback(() => {
     setIsSettingsSheetVisible(false);
-    inputRef.current?.focus();
+    if (wasFocusedBeforeSheetRef.current) {
+      inputRef.current?.focus();
+    }
   }, [inputRef]);
 
   return (

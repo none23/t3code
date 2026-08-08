@@ -100,6 +100,8 @@ export function NewTaskDraftScreen(props: {
   const loadedBranchesProjectKeyRef = useRef<string | null>(null);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [isSettingsSheetVisible, setIsSettingsSheetVisible] = useState(false);
+  const isSettingsSheetVisibleRef = useRef(false);
+  isSettingsSheetVisibleRef.current = isSettingsSheetVisible;
   const [importingShareKey, setImportingShareKey] = useState<string | null>(null);
   const [isCancellingShareImport, setIsCancellingShareImport] = useState(false);
   const [cancelledIncomingShareId, setCancelledIncomingShareId] = useState<string | null>(null);
@@ -518,7 +520,13 @@ export function NewTaskDraftScreen(props: {
 
     let focusFrame: ReturnType<typeof requestAnimationFrame> | null = null;
     const interaction = InteractionManager.runAfterInteractions(() => {
-      focusFrame = requestAnimationFrame(() => promptInputRef.current?.focus());
+      focusFrame = requestAnimationFrame(() => {
+        // The delayed focus can land after the settings sheet opened, which
+        // would pop the keyboard underneath its modal.
+        if (!isSettingsSheetVisibleRef.current) {
+          promptInputRef.current?.focus();
+        }
+      });
     });
 
     return () => {
@@ -637,13 +645,18 @@ export function NewTaskDraftScreen(props: {
   );
   // Order matters: mark the sheet open before dismissing the keyboard so the
   // Android draft layout (expanded only while focused) doesn't collapse.
+  // The keyboard only comes back on close if it was up when the sheet opened.
+  const wasFocusedBeforeSheetRef = useRef(false);
   const openSettingsSheet = useCallback(() => {
+    wasFocusedBeforeSheetRef.current = isComposerFocused;
     setIsSettingsSheetVisible(true);
     Keyboard.dismiss();
-  }, []);
+  }, [isComposerFocused]);
   const closeSettingsSheet = useCallback(() => {
     setIsSettingsSheetVisible(false);
-    promptInputRef.current?.focus();
+    if (wasFocusedBeforeSheetRef.current) {
+      promptInputRef.current?.focus();
+    }
   }, []);
 
   function handleEnvironmentMenuAction(event: string) {

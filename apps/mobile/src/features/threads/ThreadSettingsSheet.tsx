@@ -179,14 +179,19 @@ function ProviderHeader(props: {
 function DisclosureRow(props: {
   readonly label: string;
   readonly value: string | undefined;
+  readonly disabled?: boolean;
   readonly onPress: () => void;
 }) {
   const iconSubtle = useThemeColor("--color-icon-subtle");
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={props.disabled}
       onPress={props.onPress}
-      className="flex-row items-center gap-2 px-5 py-3 active:opacity-70"
+      className={cn(
+        "flex-row items-center gap-2 px-5 py-3 active:opacity-70",
+        props.disabled && "opacity-40",
+      )}
     >
       <Text className="text-sm font-t3-medium text-foreground">{props.label}</Text>
       <View className="flex-1" />
@@ -236,14 +241,21 @@ function ChoiceRow(props: {
 function SwitchRow(props: {
   readonly label: string;
   readonly value: boolean;
+  readonly disabled?: boolean;
   readonly onValueChange: (value: boolean) => void;
 }) {
   const activeTrack = String(useThemeColor("--color-switch-active"));
   const track = String(useThemeColor("--color-secondary-border"));
   return (
-    <View className="flex-row items-center justify-between px-5 py-2.5">
+    <View
+      className={cn(
+        "flex-row items-center justify-between px-5 py-2.5",
+        props.disabled && "opacity-40",
+      )}
+    >
       <Text className="text-sm font-t3-medium text-foreground">{props.label}</Text>
       <Switch
+        disabled={props.disabled}
         ios_backgroundColor={track}
         onValueChange={props.onValueChange}
         trackColor={{ false: track, true: activeTrack }}
@@ -326,12 +338,41 @@ export function ThreadSettingsSheet(props: {
   const hasLegacyModels = props.providerGroups.some((group) =>
     group.models.some((model) => model.isLegacy),
   );
-  // A legacy selection forces the toggle on: hiding the highlighted model
-  // would strand the checkmark somewhere invisible.
-  const displayedIsLegacy = props.providerGroups.some((group) =>
-    group.models.some((model) => model.isLegacy && isDisplayed(model)),
-  );
-  const showLegacy = showLegacyToggle || displayedIsLegacy;
+  // Legacy stays hidden unless the pill is toggled this open; a highlighted
+  // legacy model is exempted from the filter instead of forcing the whole
+  // legacy list visible.
+  const showLegacy = showLegacyToggle;
+
+  // Stable settings rows: the union of descriptors across the primary
+  // harnesses' current models (plus whatever the displayed model advertises)
+  // always renders, with unsupported rows disabled instead of vanishing when
+  // the selection changes. Keyed by label, not id — Claude and Codex use
+  // different ids for the same "Reasoning" concept.
+  const descriptorTemplate = (() => {
+    const seen = new Map<string, { type: "select" | "boolean" }>();
+    for (const group of props.providerGroups) {
+      const driver = group.models[0]?.providerDriver;
+      if (driver === undefined || !PRIMARY_PROVIDER_DRIVERS.has(driver)) {
+        continue;
+      }
+      for (const model of group.models) {
+        if (model.isLegacy) {
+          continue;
+        }
+        for (const descriptor of model.capabilities?.optionDescriptors ?? []) {
+          if (!seen.has(descriptor.label)) {
+            seen.set(descriptor.label, { type: descriptor.type });
+          }
+        }
+      }
+    }
+    for (const descriptor of displayedDescriptors) {
+      if (!seen.has(descriptor.label)) {
+        seen.set(descriptor.label, { type: descriptor.type });
+      }
+    }
+    return [...seen.entries()].map(([label, entry]) => ({ label, ...entry }));
+  })();
 
   const handleSave = () => {
     if (pendingModel) {
@@ -439,17 +480,11 @@ export function ThreadSettingsSheet(props: {
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ selected: showLegacy }}
-                // Forced on while the highlighted model is legacy: hiding it
-                // would strand the checkmark, so don't offer a no-op.
-                disabled={displayedIsLegacy}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   setShowLegacyToggle(!showLegacy);
                 }}
-                className={cn(
-                  "rounded-full border border-border bg-subtle px-3 py-1.5 active:opacity-70",
-                  displayedIsLegacy && "opacity-40",
-                )}
+                className="rounded-full border border-border bg-subtle px-3 py-1.5 active:opacity-70"
               >
                 <Text className="text-2xs font-t3-medium text-foreground-muted">
                   {showLegacy ? "Hide legacy models" : "Show legacy models"}
@@ -470,7 +505,7 @@ export function ThreadSettingsSheet(props: {
               const isPrimary = driver !== undefined && PRIMARY_PROVIDER_DRIVERS.has(driver);
               const visibleModels = showLegacy
                 ? group.models
-                : group.models.filter((model) => !model.isLegacy);
+                : group.models.filter((model) => !model.isLegacy || isDisplayed(model));
               if (visibleModels.length === 0) {
                 return null;
               }
@@ -509,23 +544,39 @@ export function ThreadSettingsSheet(props: {
           <View className="mx-5 h-px bg-border" />
 
           <View style={{ paddingBottom: insets.bottom + 12 }}>
-            {displayedDescriptors.map((descriptor) =>
-              descriptor.type === "select" ? (
-                <DisclosureRow
-                  key={descriptor.id}
-                  label={descriptor.label}
-                  value={getProviderOptionCurrentLabel(descriptor)}
-                  onPress={() => setSubmenu({ kind: "descriptor", id: descriptor.id })}
-                />
-              ) : (
+            {descriptorTemplate.map((entry) => {
+              const live = displayedDescriptors.find(
+                (descriptor) => descriptor.label === entry.label,
+              );
+              if ((live?.type ?? entry.type) === "select") {
+                return (
+                  <DisclosureRow
+                    key={entry.label}
+                    label={entry.label}
+                    value={live ? getProviderOptionCurrentLabel(live) : undefined}
+                    disabled={!live}
+                    onPress={() => {
+                      if (live) {
+                        setSubmenu({ kind: "descriptor", id: live.id });
+                      }
+                    }}
+                  />
+                );
+              }
+              return (
                 <SwitchRow
-                  key={descriptor.id}
-                  label={descriptor.label}
-                  value={descriptor.currentValue ?? false}
-                  onValueChange={(value) => handleOptionChange(descriptor.id, value)}
+                  key={entry.label}
+                  label={entry.label}
+                  value={live?.type === "boolean" ? (live.currentValue ?? false) : false}
+                  disabled={!live}
+                  onValueChange={(value) => {
+                    if (live) {
+                      handleOptionChange(live.id, value);
+                    }
+                  }}
                 />
-              ),
-            )}
+              );
+            })}
             <DisclosureRow
               label="Runtime"
               value={
