@@ -10,10 +10,10 @@
  *
  * @module usageTranscriptReader
  */
-import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
-import { createInterface } from "node:readline";
-import { join } from "node:path";
+import * as NodeFS from "node:fs";
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+import * as NodeReadline from "node:readline";
 
 import type { UsageProviderKind } from "@t3tools/contracts";
 
@@ -47,19 +47,19 @@ export async function listTranscriptFiles(
   const walk = async (dir: string): Promise<void> => {
     let entries;
     try {
-      entries = await readdir(dir, { withFileTypes: true });
+      entries = await NodeFSP.readdir(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const child = join(dir, entry.name);
+      const child = NodePath.join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(child);
         continue;
       }
       if (!entry.name.endsWith(".jsonl")) continue;
       try {
-        const stats = await stat(child);
+        const stats = await NodeFSP.stat(child);
         if (stats.mtimeMs >= sinceMs) {
           found.push({ path: child, size: stats.size, mtimeMs: stats.mtimeMs });
         }
@@ -88,8 +88,8 @@ export async function readTranscriptRecords(
   const codexState = initialCodexScanState();
 
   try {
-    const lines = createInterface({
-      input: createReadStream(filePath, { encoding: "utf8" }),
+    const lines = NodeReadline.createInterface({
+      input: NodeFS.createReadStream(filePath, { encoding: "utf8" }),
       crlfDelay: Infinity,
     });
 

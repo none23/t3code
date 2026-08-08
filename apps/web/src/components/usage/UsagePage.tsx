@@ -35,7 +35,7 @@ export function UsagePage() {
     () => enumerateDays(window.sinceDay, window.untilDay),
     [window.sinceDay, window.untilDay],
   );
-  const recentDays = useMemo(() => [...merged.daily].reverse().slice(0, 8), [merged.daily]);
+  const recentDays = useMemo(() => merged.daily.toReversed().slice(0, 8), [merged.daily]);
 
   const activeDays = merged.daily.filter((day) => day.totalTokens > 0).length;
   const dailyAverage = activeDays === 0 ? 0 : merged.totalTokens / activeDays;
