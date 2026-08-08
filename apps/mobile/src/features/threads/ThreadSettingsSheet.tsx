@@ -288,7 +288,12 @@ type SubmenuPage =
  */
 export function ThreadSettingsSheet(props: {
   readonly visible: boolean;
-  readonly onClose: () => void;
+  /**
+   * "save" = the Save/Done button (the user is finished configuring);
+   * "dismiss" = backdrop, grabber, or system back. Hosts only restore the
+   * keyboard for "save" so a stray tap outside a control never pops it.
+   */
+  readonly onClose: (reason: "save" | "dismiss") => void;
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
   readonly selectedModel: ModelSelection | null;
   readonly onSelectModel: (option: ModelOption) => void;
@@ -379,7 +384,7 @@ export function ThreadSettingsSheet(props: {
       void Haptics.selectionAsync();
       props.onSelectModel(pendingModel);
     }
-    props.onClose();
+    props.onClose("save");
   };
 
   const handleOptionChange = (id: string, value: string | boolean) => {
@@ -452,13 +457,13 @@ export function ThreadSettingsSheet(props: {
       navigationBarTranslucent
       animationType="fade"
       visible={props.visible}
-      onRequestClose={submenuContent ? () => setSubmenu(null) : props.onClose}
+      onRequestClose={submenuContent ? () => setSubmenu(null) : () => props.onClose("dismiss")}
     >
       <View className="flex-1 justify-end">
         <Pressable
           accessibilityLabel="Close thread settings"
           className="absolute inset-0 bg-backdrop"
-          onPress={props.onClose}
+          onPress={() => props.onClose("dismiss")}
         />
         <View
           className="overflow-hidden rounded-t-[24px] border border-b-0 border-border bg-sheet"
@@ -470,7 +475,7 @@ export function ThreadSettingsSheet(props: {
           <Pressable
             accessibilityLabel="Close thread settings"
             accessibilityRole="button"
-            onPress={props.onClose}
+            onPress={() => props.onClose("dismiss")}
             className="items-center pb-1 pt-2.5"
           >
             <View className="h-1 w-9 rounded-full bg-subtle-strong" />
@@ -480,6 +485,7 @@ export function ThreadSettingsSheet(props: {
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ selected: showLegacy }}
+                hitSlop={8}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   setShowLegacyToggle(!showLegacy);

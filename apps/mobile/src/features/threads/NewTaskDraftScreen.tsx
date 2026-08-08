@@ -652,9 +652,11 @@ export function NewTaskDraftScreen(props: {
     setIsSettingsSheetVisible(true);
     Keyboard.dismiss();
   }, [isComposerFocused]);
-  const closeSettingsSheet = useCallback(() => {
+  const closeSettingsSheet = useCallback((reason: "save" | "dismiss") => {
     setIsSettingsSheetVisible(false);
-    if (wasFocusedBeforeSheetRef.current) {
+    // Only Save/Done restores the keyboard: a dismissal (backdrop or
+    // grabber, including stray taps near the sheet's edge) closes quietly.
+    if (reason === "save" && wasFocusedBeforeSheetRef.current) {
       promptInputRef.current?.focus();
     }
   }, []);

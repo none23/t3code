@@ -629,12 +629,17 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     setIsSettingsSheetVisible(true);
     Keyboard.dismiss();
   }, [isFocused]);
-  const closeSettingsSheet = useCallback(() => {
-    setIsSettingsSheetVisible(false);
-    if (wasFocusedBeforeSheetRef.current) {
-      inputRef.current?.focus();
-    }
-  }, [inputRef]);
+  const closeSettingsSheet = useCallback(
+    (reason: "save" | "dismiss") => {
+      setIsSettingsSheetVisible(false);
+      // Only Save/Done restores the keyboard: a dismissal (backdrop or
+      // grabber, including stray taps near the sheet's edge) closes quietly.
+      if (reason === "save" && wasFocusedBeforeSheetRef.current) {
+        inputRef.current?.focus();
+      }
+    },
+    [inputRef],
+  );
 
   return (
     <Animated.View
