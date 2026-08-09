@@ -33,6 +33,23 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings terminal keyboard mode", () => {
+  it("defaults to physical keys and accepts logical keys", () => {
+    expect(decodeClientSettings({}).terminalKeyboardMode).toBe("physical");
+    expect(decodeClientSettings({ terminalKeyboardMode: "logical" }).terminalKeyboardMode).toBe(
+      "logical",
+    );
+    expect(
+      decodeClientSettingsPatch({ terminalKeyboardMode: "logical" }).terminalKeyboardMode,
+    ).toBe("logical");
+  });
+
+  it("rejects unsupported modes", () => {
+    expect(() => decodeClientSettings({ terminalKeyboardMode: "automatic" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ terminalKeyboardMode: "automatic" })).toThrow();
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

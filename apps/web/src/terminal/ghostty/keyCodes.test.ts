@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ghosttyKeyForCode, ghosttyUnshiftedCodepoint } from "./keyCodes";
+import { ghosttyKeyForCode, ghosttyUnshiftedCodepoint, terminalKeyCodeForEvent } from "./keyCodes";
 
 describe("ghosttyKeyForCode", () => {
   it("keeps the tail of the pinned Ghostty key enum in order", () => {
@@ -8,6 +8,28 @@ describe("ghosttyKeyForCode", () => {
     expect(ghosttyKeyForCode("PrintScreen")).toBe(ghosttyKeyForCode("FnLock") + 1);
     expect(ghosttyKeyForCode("Pause")).toBe(ghosttyKeyForCode("ScrollLock") + 1);
     expect(ghosttyKeyForCode("Paste")).toBe(ghosttyKeyForCode("Cut") + 1);
+  });
+
+  it("can interpret remapped logical keys without changing the physical-key default", () => {
+    const remappedCapsLock = { code: "CapsLock", key: "Escape", location: 0 };
+
+    expect(terminalKeyCodeForEvent(remappedCapsLock, "physical")).toBe("CapsLock");
+    expect(terminalKeyCodeForEvent(remappedCapsLock, "logical")).toBe("Escape");
+  });
+
+  it("translates unambiguous logical keys and preserves location-dependent keys", () => {
+    expect(terminalKeyCodeForEvent({ code: "KeyQ", key: "a", location: 0 }, "logical")).toBe(
+      "KeyA",
+    );
+    expect(terminalKeyCodeForEvent({ code: "Digit8", key: "!", location: 0 }, "logical")).toBe(
+      "Digit8",
+    );
+    expect(terminalKeyCodeForEvent({ code: "Numpad1", key: "1", location: 3 }, "logical")).toBe(
+      "Numpad1",
+    );
+    expect(terminalKeyCodeForEvent({ code: "AltLeft", key: "Alt", location: 1 }, "logical")).toBe(
+      "AltLeft",
+    );
   });
 });
 

@@ -83,3 +83,24 @@ Examples:
 - For a key event, the last rule where both `key` matches and `when` evaluates to `true` wins.
 - Precedence is across commands, not only within the same command. A later rule for a different
   command can take a key away from an earlier one.
+
+## Honor system key remaps in the desktop terminal
+
+The desktop terminal identifies keys by their physical key code by default. To honor logical keys
+reported after operating system remapping, fully quit T3 Code and add this property to
+`~/.t3/userdata/client-settings.json`:
+
+```json
+{
+  "terminalKeyboardMode": "logical"
+}
+```
+
+If the file already contains settings, add the property without replacing the others. When
+`T3CODE_HOME` is set, the file lives at `$T3CODE_HOME/userdata/client-settings.json` instead. T3
+Code may normalize the file when it next writes client settings.
+
+For example, a Caps Lock-to-Escape remap will then send Escape even though the physical key code
+remains Caps Lock. Keys without an unambiguous logical terminal equivalent continue to use their
+physical code. Remove the property or set it to `"physical"` to restore the default. Web clients
+store their client settings separately and do not read this file.

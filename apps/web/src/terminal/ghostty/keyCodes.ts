@@ -1,3 +1,5 @@
+import type { TerminalKeyboardMode } from "@t3tools/contracts";
+
 // This order mirrors GhosttyKey in ghostty/vt/key/event.h. The values are
 // intentionally derived from the official W3C-aligned enum instead of
 // maintaining a second keyboard protocol.
@@ -183,6 +185,22 @@ const ghosttyKeyboardCodes = [
 const codeToGhosttyKey = new Map<string, number>(
   ghosttyKeyboardCodes.map((code, index) => [code, index]),
 );
+
+function logicalKeyToCode(key: string): string | undefined {
+  if (codeToGhosttyKey.has(key)) return key;
+  if (key === " ") return "Space";
+  if (/^[a-z]$/iu.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/u.test(key)) return `Digit${key}`;
+  return undefined;
+}
+
+export function terminalKeyCodeForEvent(
+  event: Pick<KeyboardEvent, "code" | "key" | "location">,
+  mode: TerminalKeyboardMode,
+): string {
+  if (mode === "physical" || event.location === 3) return event.code;
+  return logicalKeyToCode(event.key) ?? event.code;
+}
 
 export function ghosttyKeyForCode(code: string): number {
   return codeToGhosttyKey.get(code) ?? 0;

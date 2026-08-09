@@ -1,8 +1,11 @@
+import type { TerminalKeyboardMode } from "@t3tools/contracts";
+
 import {
   type GhosttyKeyboardLayoutMap,
   ghosttyKeyForCode,
   ghosttyUnshiftedCodepoint,
   loadGhosttyKeyboardLayoutMap,
+  terminalKeyCodeForEvent,
 } from "./keyCodes";
 import { GhosttyRuntime, loadGhosttyRuntime } from "./runtime";
 
@@ -447,7 +450,11 @@ export class GhosttyTerminalCore {
     );
   }
 
-  encodeKey(event: KeyboardEvent, action: "press" | "release" = "press"): string {
+  encodeKey(
+    event: KeyboardEvent,
+    action: "press" | "release" = "press",
+    keyboardMode: TerminalKeyboardMode = "physical",
+  ): string {
     this.ensureActive();
     this.runtime.call("ghostty_key_encoder_setopt_from_terminal", this.keyEncoder, this.terminal);
     this.runtime.call(
@@ -455,7 +462,11 @@ export class GhosttyTerminalCore {
       this.keyEvent,
       action === "release" ? 0 : event.repeat ? 2 : 1,
     );
-    this.runtime.call("ghostty_key_event_set_key", this.keyEvent, ghosttyKeyForCode(event.code));
+    this.runtime.call(
+      "ghostty_key_event_set_key",
+      this.keyEvent,
+      ghosttyKeyForCode(terminalKeyCodeForEvent(event, keyboardMode)),
+    );
     const mods =
       (event.shiftKey ? 1 : 0) |
       (event.ctrlKey ? 1 << 1 : 0) |

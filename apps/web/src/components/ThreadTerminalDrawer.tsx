@@ -352,6 +352,9 @@ export function TerminalViewport({
       terminal: settings.fontSizeTerminal,
     }),
   );
+  const terminalKeyboardMode = useClientSettings((settings) => settings.terminalKeyboardMode);
+  const terminalKeyboardModeRef = useRef(terminalKeyboardMode);
+  terminalKeyboardModeRef.current = terminalKeyboardMode;
   const terminalFontRef = useRef({ family: terminalFontFamily, size: terminalFontSize });
   const terminalSession = useAttachedTerminalSession({
     environmentId,
@@ -442,6 +445,7 @@ export function TerminalViewport({
         onSelectionChange: () => handleSelectionChange(),
         onCopy: (text) => handleCopy(text),
         beforeKey: (event) => handleBeforeKey(event),
+        getKeyboardMode: () => terminalKeyboardModeRef.current,
         onLinkActivate: (text, event) => handleLinkActivate(text, event),
       };
       const terminal = await GhosttyTerminalSurface.create(mount, terminalOptions);
