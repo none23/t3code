@@ -2,6 +2,10 @@ import { tokenizeCliArgs } from "@t3tools/shared/cliArgs";
 
 export const T3CODE_CODEX_LAUNCH_ARGS_ENV = "T3CODE_CODEX_LAUNCH_ARGS";
 
+// Build mode is T3's default workflow, but agents still need a structured way
+// to pause for consequential decisions without switching into legacy Plan mode.
+const DEFAULT_MODE_USER_INPUT_FEATURE = "default_mode_request_user_input";
+
 export const resolveCodexLaunchArgs = (
   launchArgs?: string,
   environment: NodeJS.ProcessEnv = process.env,
@@ -12,6 +16,8 @@ export const codexLaunchArgv = (launchArgs?: string): ReadonlyArray<string> =>
 
 export const codexAppServerArgs = (launchArgs?: string) => [
   "app-server",
+  "--enable",
+  DEFAULT_MODE_USER_INPUT_FEATURE,
   ...codexLaunchArgv(launchArgs),
 ];
 

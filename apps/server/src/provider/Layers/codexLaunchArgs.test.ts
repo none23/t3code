@@ -29,16 +29,32 @@ describe("resolveCodexLaunchArgs", () => {
 });
 
 describe("codexAppServerArgs", () => {
-  it("returns the app-server command for empty launch args", () => {
-    NodeAssert.deepStrictEqual(codexAppServerArgs(""), ["app-server"]);
+  it("enables structured user input in default mode", () => {
+    NodeAssert.deepStrictEqual(codexAppServerArgs(""), [
+      "app-server",
+      "--enable",
+      "default_mode_request_user_input",
+    ]);
   });
 
-  it("appends parsed launch args after app-server", () => {
+  it("appends parsed launch args after T3 defaults", () => {
     NodeAssert.deepStrictEqual(codexAppServerArgs("--strict-config --enable foo"), [
       "app-server",
+      "--enable",
+      "default_mode_request_user_input",
       "--strict-config",
       "--enable",
       "foo",
+    ]);
+  });
+
+  it("preserves an explicit user disable override", () => {
+    NodeAssert.deepStrictEqual(codexAppServerArgs("--disable default_mode_request_user_input"), [
+      "app-server",
+      "--enable",
+      "default_mode_request_user_input",
+      "--disable",
+      "default_mode_request_user_input",
     ]);
   });
 });

@@ -247,6 +247,16 @@ describe("buildTurnStartParams", () => {
 });
 
 describe("buildCodexDeveloperInstructions", () => {
+  it("prefers structured questions when the tool is available in default mode", () => {
+    const instructions = buildCodexDeveloperInstructions("default", {
+      model: "gpt-5.3-codex",
+      reasoningEffort: "high",
+    });
+
+    NodeAssert.match(instructions, /request_user_input.*when it is listed/s);
+    NodeAssert.doesNotMatch(instructions, /unavailable in Default mode/);
+  });
+
   it("appends runtime info after the mode instructions", () => {
     const instructions = buildCodexDeveloperInstructions("default", {
       model: "gpt-5.3-codex",
@@ -322,6 +332,8 @@ describe("codexSessionAppServerArgs", () => {
   it("keeps the app-server subcommand when explicit args are provided", () => {
     NodeAssert.deepStrictEqual(codexSessionAppServerArgs(["-c", "model=gpt-5"], undefined), [
       "app-server",
+      "--enable",
+      "default_mode_request_user_input",
       "-c",
       "model=gpt-5",
     ]);
@@ -335,6 +347,8 @@ describe("codexSessionAppServerArgs", () => {
       ),
       [
         "app-server",
+        "--enable",
+        "default_mode_request_user_input",
         "--strict-config",
         "--enable",
         "foo",
