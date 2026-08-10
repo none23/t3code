@@ -14,7 +14,10 @@ import {
 import {
   encodeAndroidPairingUrls,
   normalizeStorePng,
+  newTaskComposerControlFailures,
   parseShowcaseCliArgs,
+  parseAndroidUiNodes,
+  parseVisibleAndroidImeTop,
   parsePairingCredentialOutput,
   planShowcaseCaptures,
   readPngDimensions,
@@ -65,6 +68,7 @@ const config: ShowcaseConfig = {
       avd: "Pixel_Test",
       appearance: "light",
       scenes: ["thread", "terminal"],
+      testScenes: ["new-task-keyboard"],
       storeAsset: googleSpec,
     },
   ],
@@ -135,6 +139,19 @@ it("plans only scenes supported by each selected device", () => {
     })),
     [{ id: "pixel", appearance: "light", scenes: ["terminal"] }],
   );
+});
+
+it("keeps regression-only scenes out of default store captures", () => {
+  const captures = planShowcaseCaptures(config, parseShowcaseCliArgs(["--device", "pixel"]));
+  assert.deepStrictEqual(captures[0]?.scenes, ["thread", "terminal"]);
+});
+
+it("selects an explicit Android keyboard regression scene", () => {
+  const captures = planShowcaseCaptures(
+    config,
+    parseShowcaseCliArgs(["--device", "pixel", "--scene", "new-task-keyboard"]),
+  );
+  assert.deepStrictEqual(captures[0]?.scenes, ["new-task-keyboard"]);
 });
 
 it("expands both appearances into independent upload-ready directories", () => {
@@ -259,6 +276,59 @@ it("maps capture scenes to the real application routes", () => {
     showcaseSceneUrl("review", "environment-1"),
     "t3code://threads/environment-1/remote-command-center/review",
   );
+  assert.equal(showcaseSceneUrl("new-task-keyboard", "environment-1"), "t3code://new/draft");
+});
+
+it("parses Android accessibility bounds used by the keyboard regression", () => {
+  const [node] = parseAndroidUiNodes(`<?xml version="1.0"?><hierarchy>
+    <node text="" content-desc="Thread settings &amp; model" class="android.view.View"
+      visible-to-user="true" bounds="[12,840][420,900]" />
+  </hierarchy>`);
+  assert.deepStrictEqual(node, {
+    className: "android.view.View",
+    contentDescription: "Thread settings & model",
+    text: "",
+    visibleToUser: true,
+    bounds: { left: 12, top: 840, right: 420, bottom: 900 },
+  });
+});
+
+it("reads the visible IME boundary from Android window insets", () => {
+  assert.equal(
+    parseVisibleAndroidImeTop(`
+      InsetsSource id=ime type=ime frame=[0,1180][1080,2400] visible=true
+      InsetsSource id=navigationBars type=navigationBars frame=[0,2320][1080,2400] visible=true
+    `),
+    1180,
+  );
+  assert.equal(
+    parseVisibleAndroidImeTop(
+      "InsetsSource id=ime mType=ime mFrame=[0,1180][1080,2400] mVisible=false",
+    ),
+    null,
+  );
+});
+
+it("fails when New Thread controls extend behind the Android keyboard", () => {
+  const xml = `<hierarchy>
+    <node content-desc="Add image" class="android.view.View" visible-to-user="true" bounds="[0,1140][80,1220]" />
+    <node content-desc="Thread settings" class="android.view.View" visible-to-user="true" bounds="[80,1140][600,1220]" />
+    <node content-desc="Start task" class="android.view.View" visible-to-user="false" bounds="[940,1140][1080,1220]" />
+  </hierarchy>`;
+  assert.deepStrictEqual(newTaskComposerControlFailures(xml, 1180), [
+    "Add image extends below the IME top (1180px)",
+    "Thread settings extends below the IME top (1180px)",
+    "Submit is not visible to the user",
+  ]);
+});
+
+it("accepts visible New Thread controls above the Android keyboard", () => {
+  const xml = `<hierarchy>
+    <node content-desc="Add image" class="android.view.View" visible-to-user="true" bounds="[0,1000][80,1080]" />
+    <node content-desc="Thread settings" class="android.view.View" visible-to-user="true" bounds="[80,1000][600,1080]" />
+    <node content-desc="Queue task" class="android.view.View" visible-to-user="true" bounds="[940,1000][1080,1080]" />
+  </hierarchy>`;
+  assert.deepStrictEqual(newTaskComposerControlFailures(xml, 1180), []);
 });
 
 it("seeds a playful multi-environment project spectrum", () => {

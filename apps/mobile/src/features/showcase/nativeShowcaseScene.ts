@@ -1,6 +1,13 @@
 import { requireOptionalNativeModule } from "expo";
 
-export const SHOWCASE_SCENES = ["threads", "thread", "terminal", "review", "environments"] as const;
+export const SHOWCASE_SCENES = [
+  "threads",
+  "thread",
+  "terminal",
+  "review",
+  "environments",
+  "new-task-keyboard",
+] as const;
 export type ShowcaseScene = (typeof SHOWCASE_SCENES)[number];
 
 export type ShowcaseOrientation = "portrait" | "landscape";

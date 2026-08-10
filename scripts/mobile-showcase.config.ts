@@ -41,6 +41,8 @@ export interface ShowcaseAndroidDevice {
   /** Native ABI used by the AVD, from its config.ini `abi.type`. */
   readonly abi?: "arm64-v8a" | "x86_64" | "x86" | "armeabi-v7a";
   readonly scenes: ReadonlyArray<ShowcaseScene>;
+  /** Explicit-only regression scenes which should not become store screenshots. */
+  readonly testScenes?: ReadonlyArray<ShowcaseScene>;
   /** Optional capture viewport. Omit to use the AVD's native size and density. */
   readonly viewport?: {
     readonly width: number;
@@ -149,6 +151,7 @@ const config: ShowcaseConfig = {
         density: 420,
       },
       scenes: ["thread", "terminal", "review", "threads", "environments"],
+      testScenes: ["new-task-keyboard"],
       storeAsset: {
         store: "google-play",
         directory: "google-play/phone",

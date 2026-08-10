@@ -32,6 +32,7 @@ function sceneFromPathname(pathname: string): ShowcaseScene | null {
   }
   if (routePath.endsWith("/terminal")) return "terminal";
   if (routePath.endsWith("/review")) return "review";
+  if (routePath.endsWith("/new/draft")) return "new-task-keyboard";
   if (routePath.startsWith("/threads/")) return "thread";
   if (routePath === "/") return "threads";
   return null;
@@ -122,6 +123,11 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
     threads.some((thread) => String(thread.id) === SHOWCASE_THREAD_ID);
   const hasFixture = hasServerFixture && pendingTasksReady;
   const showcaseThread = threads.find((thread) => String(thread.id) === SHOWCASE_THREAD_ID);
+  const showcaseProject = projects.find(
+    (project) =>
+      project.environmentId === showcaseThread?.environmentId &&
+      project.id === showcaseThread.projectId,
+  );
 
   useEffect(() => {
     if (!SHOWCASE_ENABLED || !hasServerFixture || pendingTasksReady) return;
@@ -155,7 +161,14 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
   }, [hasServerFixture, pendingTasksReady, projects]);
 
   useEffect(() => {
-    if (!SHOWCASE_ENABLED || requestedScene === null || !hasFixture || !showcaseThread) return;
+    if (
+      !SHOWCASE_ENABLED ||
+      requestedScene === null ||
+      !hasFixture ||
+      !showcaseThread ||
+      !showcaseProject
+    )
+      return;
     if (scene === requestedScene) return;
 
     const params = {
@@ -169,7 +182,10 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
     const routes: Array<{
       name: string;
       params?: Record<string, unknown>;
-      state?: { index: number; routes: Array<{ name: string }> };
+      state?: {
+        index: number;
+        routes: Array<{ name: string; params?: Record<string, unknown> }>;
+      };
     }> = [{ name: "Home" }];
     if (requestedScene === "environments") {
       routes.push({
@@ -177,6 +193,24 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
         state: {
           index: 1,
           routes: [{ name: "Settings" }, { name: "SettingsEnvironments" }],
+        },
+      });
+    } else if (requestedScene === "new-task-keyboard") {
+      routes.push({
+        name: "NewTaskSheet",
+        state: {
+          index: 1,
+          routes: [
+            { name: "NewTask" },
+            {
+              name: "NewTaskDraft",
+              params: {
+                environmentId: String(showcaseProject.environmentId),
+                projectId: String(showcaseProject.id),
+                title: showcaseProject.title,
+              },
+            },
+          ],
         },
       });
     } else {
@@ -196,7 +230,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
         routes,
       }),
     );
-  }, [hasFixture, navigation, requestedScene, scene, showcaseThread]);
+  }, [hasFixture, navigation, requestedScene, scene, showcaseProject, showcaseThread]);
 
   useEffect(() => {
     if (

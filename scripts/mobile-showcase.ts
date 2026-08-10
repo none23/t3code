@@ -134,6 +134,91 @@ export interface PngMetadata {
   readonly hasAlpha: boolean;
 }
 
+export interface AndroidUiNode {
+  readonly className: string;
+  readonly contentDescription: string;
+  readonly text: string;
+  readonly visibleToUser: boolean;
+  readonly bounds: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  } | null;
+}
+
+function decodeXmlAttribute(value: string): string {
+  return value
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+}
+
+function xmlAttribute(attributes: string, name: string): string {
+  const match = new RegExp(`(?:^|\\s)${name}="([^"]*)"`, "u").exec(attributes);
+  return match ? decodeXmlAttribute(match[1] ?? "") : "";
+}
+
+export function parseAndroidUiNodes(xml: string): ReadonlyArray<AndroidUiNode> {
+  return [...xml.matchAll(/<node\s+([^>]+)>?/gu)].map((match) => {
+    const attributes = match[1] ?? "";
+    const boundsValue = xmlAttribute(attributes, "bounds");
+    const boundsMatch = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/u.exec(boundsValue);
+    return {
+      className: xmlAttribute(attributes, "class"),
+      contentDescription: xmlAttribute(attributes, "content-desc"),
+      text: xmlAttribute(attributes, "text"),
+      visibleToUser: xmlAttribute(attributes, "visible-to-user") === "true",
+      bounds: boundsMatch
+        ? {
+            left: Number(boundsMatch[1]),
+            top: Number(boundsMatch[2]),
+            right: Number(boundsMatch[3]),
+            bottom: Number(boundsMatch[4]),
+          }
+        : null,
+    };
+  });
+}
+
+export function parseVisibleAndroidImeTop(windowDump: string): number | null {
+  const sourceBlocks = windowDump.match(/InsetsSource[^\n]*(?:\n\s+[^\n]*){0,4}/gu) ?? [];
+  for (const block of sourceBlocks) {
+    if (!/(?:mType|type)=ime\b/u.test(block) || !/(?:mVisible|visible)=true\b/u.test(block)) {
+      continue;
+    }
+    const frame = /(?:mFrame|frame)=\[-?\d+,(-?\d+)\]\[-?\d+,-?\d+\]/u.exec(block);
+    if (frame) return Number(frame[1]);
+  }
+  return null;
+}
+
+export function newTaskComposerControlFailures(xml: string, imeTop: number): ReadonlyArray<string> {
+  const nodes = parseAndroidUiNodes(xml);
+  const controls = [
+    { name: "Add image", labels: ["Add image"] },
+    { name: "Thread settings", labels: ["Thread settings"] },
+    { name: "Submit", labels: ["Start task", "Queue task"] },
+  ];
+  return controls.flatMap((control) => {
+    const candidates = nodes.filter((node) => control.labels.includes(node.contentDescription));
+    if (candidates.length === 0) return [`${control.name} is absent from the Android UI hierarchy`];
+    if (!candidates.some((node) => node.visibleToUser)) {
+      return [`${control.name} is not visible to the user`];
+    }
+    if (
+      !candidates.some(
+        (node) => node.visibleToUser && node.bounds !== null && node.bounds.bottom <= imeTop,
+      )
+    ) {
+      return [`${control.name} extends below the IME top (${imeTop}px)`];
+    }
+    return [];
+  });
+}
+
 export function readPngMetadata(bytes: Uint8Array): PngMetadata {
   const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
   if (bytes.byteLength < 26 || !pngSignature.every((value, index) => bytes[index] === value)) {
@@ -364,7 +449,10 @@ export function planShowcaseCaptures(
         scenes:
           options.scenes.size === 0
             ? device.scenes
-            : device.scenes.filter((scene) => options.scenes.has(scene)),
+            : [
+                ...device.scenes,
+                ...(device.platform === "android" ? (device.testScenes ?? []) : []),
+              ].filter((scene) => options.scenes.has(scene)),
       }));
     })
     .filter((capture) => capture.scenes.length > 0);
@@ -405,7 +493,11 @@ Configured devices:
 ${config.devices
   .map((device) => {
     const target = device.platform === "ios" ? device.simulator : device.avd;
-    return `  ${device.id.padEnd(18)} ${device.platform.padEnd(8)} ${target} -> ${device.storeAsset.directory}/{light|dark} (${device.storeAsset.width}×${device.storeAsset.height}, default ${device.appearance}) [${device.scenes.join(", ")}]`;
+    const testScenes = device.platform === "android" ? (device.testScenes ?? []) : [];
+    const sceneSummary = [...device.scenes, ...testScenes.map((scene) => `${scene} (test)`)].join(
+      ", ",
+    );
+    return `  ${device.id.padEnd(18)} ${device.platform.padEnd(8)} ${target} -> ${device.storeAsset.directory}/{light|dark} (${device.storeAsset.width}×${device.storeAsset.height}, default ${device.appearance}) [${sceneSummary}]`;
   })
   .join("\n")}
 `);
@@ -639,6 +731,7 @@ function buildShowcasePairingUrl(host: string, port: number, credential: string)
 export function showcaseSceneUrl(scene: ShowcaseScene, environmentId: string): string {
   if (scene === "threads") return `${APP_SCHEME}://`;
   if (scene === "environments") return `${APP_SCHEME}://settings/environments`;
+  if (scene === "new-task-keyboard") return `${APP_SCHEME}://new/draft`;
   const threadPath = `threads/${encodeURIComponent(environmentId)}/${SHOWCASE_THREAD_ID}`;
   if (scene === "thread") return `${APP_SCHEME}://${threadPath}`;
   if (scene === "terminal") {
@@ -1006,6 +1099,57 @@ async function runAdb(serial: string, args: ReadonlyArray<string>): Promise<void
   await runCommand(androidSdkTool("platform-tools/adb"), ["-s", serial, ...args]);
 }
 
+async function dumpAndroidUi(serial: string): Promise<string> {
+  const path = "/data/local/tmp/t3-mobile-showcase.xml";
+  await adbOutput(serial, ["shell", "uiautomator", "dump", path]);
+  return await adbOutput(serial, ["shell", "cat", path]);
+}
+
+async function waitForAndroidComposerEditor(
+  serial: string,
+  timeoutMs = 15_000,
+): Promise<NonNullable<AndroidUiNode["bounds"]>> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const xml = await dumpAndroidUi(serial).catch(() => "");
+    const editor = parseAndroidUiNodes(xml).find(
+      (node) =>
+        node.className === "android.widget.EditText" && node.visibleToUser && node.bounds !== null,
+    );
+    if (editor?.bounds) return editor.bounds;
+    await delay(250);
+  }
+  throw new Error("The New Thread composer editor did not become visible.");
+}
+
+async function assertAndroidNewTaskControlsAboveKeyboard(serial: string): Promise<void> {
+  const editor = await waitForAndroidComposerEditor(serial);
+  await runAdb(serial, [
+    "shell",
+    "input",
+    "tap",
+    String(Math.round((editor.left + editor.right) / 2)),
+    String(Math.round((editor.top + editor.bottom) / 2)),
+  ]);
+
+  const deadline = Date.now() + 10_000;
+  let lastFailure = "The Android IME did not become visible.";
+  while (Date.now() < deadline) {
+    const [windowDump, xml] = await Promise.all([
+      adbOutput(serial, ["shell", "dumpsys", "window"]),
+      dumpAndroidUi(serial).catch(() => ""),
+    ]);
+    const imeTop = parseVisibleAndroidImeTop(windowDump);
+    if (imeTop !== null) {
+      const failures = newTaskComposerControlFailures(xml, imeTop);
+      if (failures.length === 0) return;
+      lastFailure = failures.join("; ");
+    }
+    await delay(250);
+  }
+  throw new Error(`New Thread controls are obscured by the Android keyboard: ${lastFailure}`);
+}
+
 async function runningAndroidAvds(): Promise<ReadonlyMap<string, string>> {
   const adb = androidSdkTool("platform-tools/adb");
   const devices = (await commandOutput(adb, ["devices"]))
@@ -1209,7 +1353,16 @@ async function captureAndroid(
   for (const [sceneIndex, scene] of capture.scenes.entries()) {
     if (sceneIndex > 0) await writeAndroidShowcaseScene(serial, scene);
     await waitForAndroidShowcaseScene(serial, scene);
-    await delay(Math.max(config.settleDelayMs, scene === "review" ? 8_000 : 5_000));
+    let regressionFailure: unknown = null;
+    if (scene === "new-task-keyboard") {
+      try {
+        await assertAndroidNewTaskControlsAboveKeyboard(serial);
+      } catch (error) {
+        regressionFailure = error;
+      }
+    } else {
+      await delay(Math.max(config.settleDelayMs, scene === "review" ? 8_000 : 5_000));
+    }
     const destination = NodePath.join(
       showcaseCaptureDirectory(outputDirectory, capture),
       `${scene}.png`,
@@ -1227,6 +1380,7 @@ async function captureAndroid(
     });
     await NodeFSP.writeFile(destination, png);
     await finalizeCapture(destination, capture.device);
+    if (regressionFailure !== null) throw regressionFailure;
   }
 }
 

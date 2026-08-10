@@ -40,6 +40,7 @@
     "profile:android:hermes": "mkdir -p profiles/review && react-native profile-hermes profiles/review",
     "sync:pierre-icons": "node modules/t3-markdown-text/scripts/sync-pierre-file-icons.mjs",
     "test": "vp test run",
+    "test:android-keyboard": "EXPO_OFFLINE=1 node ../../scripts/mobile-showcase.ts --platform android --device pixel --scene new-task-keyboard --appearance dark",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
