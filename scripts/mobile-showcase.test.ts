@@ -27,6 +27,7 @@ import {
   showcaseCaptureDirectory,
   showcaseSceneUrl,
   threadComposerFooterRecoveryFailure,
+  threadComposerKeyboardOpenFailure,
   validateStoreAsset,
   validateStoreAssetCount,
 } from "./mobile-showcase.ts";
@@ -295,12 +296,13 @@ it("maps capture scenes to the real application routes", () => {
 it("parses Android accessibility bounds used by the keyboard regression", () => {
   const [node] = parseAndroidUiNodes(`<?xml version="1.0"?><hierarchy>
     <node text="" content-desc="Thread settings &amp; model" class="android.view.View"
-      resource-id="thread-composer-sticky-view" visible-to-user="true"
+      enabled="true" resource-id="thread-composer-sticky-view" visible-to-user="true"
       bounds="[12,840][420,900]" />
   </hierarchy>`);
   assert.deepStrictEqual(node, {
     className: "android.view.View",
     contentDescription: "Thread settings & model",
+    enabled: true,
     resourceId: "thread-composer-sticky-view",
     text: "",
     visibleToUser: true,
@@ -325,6 +327,28 @@ it("accepts the thread composer returning to its pre-keyboard position", () => {
       baselineBottom: 1900,
       keyboardOpenBottom: 1120,
       keyboardClosedBottom: 1896,
+    }),
+    null,
+  );
+});
+
+it("fails when the thread composer remains below the open Android keyboard", () => {
+  assert.equal(
+    threadComposerKeyboardOpenFailure({
+      baselineBottom: 1900,
+      keyboardOpenBottom: 1800,
+      imeTop: 1120,
+    }),
+    "Thread composer moved 100px of the expected 780px keyboard offset",
+  );
+});
+
+it("accepts the thread composer tracking the open Android keyboard", () => {
+  assert.equal(
+    threadComposerKeyboardOpenFailure({
+      baselineBottom: 1900,
+      keyboardOpenBottom: 1130,
+      imeTop: 1120,
     }),
     null,
   );
