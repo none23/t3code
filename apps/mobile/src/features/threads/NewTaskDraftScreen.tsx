@@ -2,7 +2,11 @@ import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { StackActions, useNavigation, usePreventRemove } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, InteractionManager, Platform, View, useColorScheme } from "react-native";
-import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
+import {
+  KeyboardAvoidingView,
+  KeyboardStickyView,
+  useKeyboardState,
+} from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { useFontFamily } from "../../lib/useFontFamily";
@@ -991,7 +995,7 @@ export function NewTaskDraftScreen(props: {
         <NativeStackScreenOptions options={{ headerShown: false }} />
         <AndroidScreenHeader title="New Thread" onBack={() => navigation.goBack()} />
 
-        <KeyboardAvoidingView automaticOffset behavior="padding" className="flex-1">
+        <KeyboardStickyView className="flex-1">
           <View className="flex-1" />
 
           <View
@@ -1057,7 +1061,7 @@ export function NewTaskDraftScreen(props: {
               </ComposerToolbarRow>
             ) : null}
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardStickyView>
         {settingsSheet}
       </View>
     );
