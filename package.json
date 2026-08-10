@@ -28,6 +28,7 @@
     "lint:mobile": "node scripts/mobile-native-static-check.ts",
     "test": "vp run -r test",
     "test:mobile:android-keyboard": "EXPO_OFFLINE=1 node scripts/mobile-showcase.ts --platform android --device pixel --scene new-task-keyboard --appearance dark",
+    "test:mobile:android-keyboard-dismiss": "EXPO_OFFLINE=1 node scripts/mobile-showcase.ts --platform android --device pixel --scene thread-keyboard-dismiss --appearance dark",
     "test:resource-monitor": "cargo test --locked --manifest-path native/resource-monitor/Cargo.toml",
     "test:desktop-smoke": "vp run --filter @t3tools/desktop smoke-test",
     "fmt": "vp fmt",

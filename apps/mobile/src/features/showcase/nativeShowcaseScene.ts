@@ -7,6 +7,7 @@ export const SHOWCASE_SCENES = [
   "review",
   "environments",
   "new-task-keyboard",
+  "thread-keyboard-dismiss",
 ] as const;
 export type ShowcaseScene = (typeof SHOWCASE_SCENES)[number];
 

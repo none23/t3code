@@ -115,7 +115,11 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
     };
   }, [connectPairingUrl, pairingUrls]);
 
-  const scene = sceneFromPathname(props.pathname);
+  const pathnameScene = sceneFromPathname(props.pathname);
+  const scene =
+    pathnameScene === "thread" && requestedScene === "thread-keyboard-dismiss"
+      ? requestedScene
+      : pathnameScene;
   const hasServerFixture =
     workspace.state.hasReadyEnvironment &&
     workspace.environments.length >= 3 &&
@@ -252,7 +256,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
       setReadyScene(null);
       return;
     }
-    if (scene === "terminal") Keyboard.dismiss();
+    if (scene === "terminal" || scene === "thread-keyboard-dismiss") Keyboard.dismiss();
 
     let renderFrame: number | null = null;
     let readyFrame: number | null = null;

@@ -137,6 +137,7 @@ export interface PngMetadata {
 export interface AndroidUiNode {
   readonly className: string;
   readonly contentDescription: string;
+  readonly resourceId: string;
   readonly text: string;
   readonly visibleToUser: boolean;
   readonly bounds: {
@@ -169,6 +170,7 @@ export function parseAndroidUiNodes(xml: string): ReadonlyArray<AndroidUiNode> {
     return {
       className: xmlAttribute(attributes, "class"),
       contentDescription: xmlAttribute(attributes, "content-desc"),
+      resourceId: xmlAttribute(attributes, "resource-id"),
       text: xmlAttribute(attributes, "text"),
       visibleToUser: xmlAttribute(attributes, "visible-to-user") === "true",
       bounds: boundsMatch
@@ -181,6 +183,28 @@ export function parseAndroidUiNodes(xml: string): ReadonlyArray<AndroidUiNode> {
         : null,
     };
   });
+}
+
+function androidUiNodeHasTestId(node: AndroidUiNode, testId: string): boolean {
+  return node.resourceId === testId || node.resourceId.endsWith(`:id/${testId}`);
+}
+
+export function threadComposerFooterRecoveryFailure(input: {
+  readonly baselineBottom: number;
+  readonly keyboardOpenBottom: number;
+  readonly keyboardClosedBottom: number;
+}): string | null {
+  const keyboardOffset = input.baselineBottom - input.keyboardOpenBottom;
+  if (keyboardOffset <= 0) {
+    return "Thread composer did not move upward with the Android keyboard";
+  }
+
+  const recoveryError = Math.abs(input.keyboardClosedBottom - input.baselineBottom);
+  const tolerance = Math.max(8, Math.round(keyboardOffset * 0.05));
+  if (recoveryError > tolerance) {
+    return `Thread composer remained ${recoveryError}px from its pre-keyboard position after the IME closed`;
+  }
+  return null;
 }
 
 export function parseVisibleAndroidImeTop(windowDump: string): number | null {
@@ -733,7 +757,9 @@ export function showcaseSceneUrl(scene: ShowcaseScene, environmentId: string): s
   if (scene === "environments") return `${APP_SCHEME}://settings/environments`;
   if (scene === "new-task-keyboard") return `${APP_SCHEME}://new/draft`;
   const threadPath = `threads/${encodeURIComponent(environmentId)}/${SHOWCASE_THREAD_ID}`;
-  if (scene === "thread") return `${APP_SCHEME}://${threadPath}`;
+  if (scene === "thread" || scene === "thread-keyboard-dismiss") {
+    return `${APP_SCHEME}://${threadPath}`;
+  }
   if (scene === "terminal") {
     return `${APP_SCHEME}://${threadPath}/terminal?terminalId=${SHOWCASE_TERMINAL_ID}`;
   }
@@ -1119,7 +1145,31 @@ async function waitForAndroidComposerEditor(
     if (editor?.bounds) return editor.bounds;
     await delay(250);
   }
-  throw new Error("The New Thread composer editor did not become visible.");
+  throw new Error("The composer editor did not become visible.");
+}
+
+async function waitForAndroidThreadComposerBaseline(
+  serial: string,
+  timeoutMs = 15_000,
+): Promise<NonNullable<AndroidUiNode["bounds"]>> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const [windowDump, xml] = await Promise.all([
+      adbOutput(serial, ["shell", "dumpsys", "window"]),
+      dumpAndroidUi(serial).catch(() => ""),
+    ]);
+    const composer = parseAndroidUiNodes(xml).find(
+      (node) =>
+        androidUiNodeHasTestId(node, "thread-composer-sticky-view") &&
+        node.visibleToUser &&
+        node.bounds !== null,
+    );
+    if (parseVisibleAndroidImeTop(windowDump) === null && composer?.bounds) {
+      return composer.bounds;
+    }
+    await delay(250);
+  }
+  throw new Error("The closed-keyboard thread composer did not become visible.");
 }
 
 async function assertAndroidNewTaskControlsAboveKeyboard(serial: string): Promise<void> {
@@ -1148,6 +1198,79 @@ async function assertAndroidNewTaskControlsAboveKeyboard(serial: string): Promis
     await delay(250);
   }
   throw new Error(`New Thread controls are obscured by the Android keyboard: ${lastFailure}`);
+}
+
+async function assertAndroidThreadComposerReturnsAfterKeyboardDismiss(
+  serial: string,
+): Promise<void> {
+  const baseline = await waitForAndroidThreadComposerBaseline(serial);
+  const editor = await waitForAndroidComposerEditor(serial);
+  await runAdb(serial, [
+    "shell",
+    "input",
+    "tap",
+    String(Math.round((editor.left + editor.right) / 2)),
+    String(Math.round((editor.top + editor.bottom) / 2)),
+  ]);
+
+  const openDeadline = Date.now() + 10_000;
+  let keyboardOpenBottom: number | null = null;
+  while (Date.now() < openDeadline) {
+    const [windowDump, xml] = await Promise.all([
+      adbOutput(serial, ["shell", "dumpsys", "window"]),
+      dumpAndroidUi(serial).catch(() => ""),
+    ]);
+    const composer = parseAndroidUiNodes(xml).find(
+      (node) =>
+        androidUiNodeHasTestId(node, "thread-composer-sticky-view") &&
+        node.visibleToUser &&
+        node.bounds !== null,
+    );
+    if (
+      parseVisibleAndroidImeTop(windowDump) !== null &&
+      composer?.bounds &&
+      composer.bounds.bottom < baseline.bottom
+    ) {
+      keyboardOpenBottom = composer.bounds.bottom;
+      break;
+    }
+    await delay(250);
+  }
+  if (keyboardOpenBottom === null) {
+    throw new Error("The thread composer did not move upward with the Android keyboard.");
+  }
+
+  await runAdb(serial, ["shell", "input", "keyevent", "KEYCODE_BACK"]);
+
+  const closedDeadline = Date.now() + 10_000;
+  let lastFailure = "The Android IME remained visible.";
+  while (Date.now() < closedDeadline) {
+    const [windowDump, xml] = await Promise.all([
+      adbOutput(serial, ["shell", "dumpsys", "window"]),
+      dumpAndroidUi(serial).catch(() => ""),
+    ]);
+    if (parseVisibleAndroidImeTop(windowDump) === null) {
+      const composer = parseAndroidUiNodes(xml).find(
+        (node) =>
+          androidUiNodeHasTestId(node, "thread-composer-sticky-view") &&
+          node.visibleToUser &&
+          node.bounds !== null,
+      );
+      if (composer?.bounds) {
+        lastFailure =
+          threadComposerFooterRecoveryFailure({
+            baselineBottom: baseline.bottom,
+            keyboardOpenBottom,
+            keyboardClosedBottom: composer.bounds.bottom,
+          }) ?? "";
+        if (lastFailure === "") return;
+      } else {
+        lastFailure = "The thread composer disappeared after the Android IME closed.";
+      }
+    }
+    await delay(250);
+  }
+  throw new Error(`Thread composer did not return after keyboard dismissal: ${lastFailure}`);
 }
 
 async function runningAndroidAvds(): Promise<ReadonlyMap<string, string>> {
@@ -1357,6 +1480,12 @@ async function captureAndroid(
     if (scene === "new-task-keyboard") {
       try {
         await assertAndroidNewTaskControlsAboveKeyboard(serial);
+      } catch (error) {
+        regressionFailure = error;
+      }
+    } else if (scene === "thread-keyboard-dismiss") {
+      try {
+        await assertAndroidThreadComposerReturnsAfterKeyboardDismiss(serial);
       } catch (error) {
         regressionFailure = error;
       }

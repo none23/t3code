@@ -26,6 +26,7 @@ import {
   selectLanIpv4Address,
   showcaseCaptureDirectory,
   showcaseSceneUrl,
+  threadComposerFooterRecoveryFailure,
   validateStoreAsset,
   validateStoreAssetCount,
 } from "./mobile-showcase.ts";
@@ -68,7 +69,7 @@ const config: ShowcaseConfig = {
       avd: "Pixel_Test",
       appearance: "light",
       scenes: ["thread", "terminal"],
-      testScenes: ["new-task-keyboard"],
+      testScenes: ["new-task-keyboard", "thread-keyboard-dismiss"],
       storeAsset: googleSpec,
     },
   ],
@@ -152,6 +153,14 @@ it("selects an explicit Android keyboard regression scene", () => {
     parseShowcaseCliArgs(["--device", "pixel", "--scene", "new-task-keyboard"]),
   );
   assert.deepStrictEqual(captures[0]?.scenes, ["new-task-keyboard"]);
+});
+
+it("selects the thread composer keyboard-dismiss regression scene", () => {
+  const captures = planShowcaseCaptures(
+    config,
+    parseShowcaseCliArgs(["--device", "pixel", "--scene", "thread-keyboard-dismiss"]),
+  );
+  assert.deepStrictEqual(captures[0]?.scenes, ["thread-keyboard-dismiss"]);
 });
 
 it("expands both appearances into independent upload-ready directories", () => {
@@ -277,20 +286,48 @@ it("maps capture scenes to the real application routes", () => {
     "t3code://threads/environment-1/remote-command-center/review",
   );
   assert.equal(showcaseSceneUrl("new-task-keyboard", "environment-1"), "t3code://new/draft");
+  assert.equal(
+    showcaseSceneUrl("thread-keyboard-dismiss", "environment-1"),
+    "t3code://threads/environment-1/remote-command-center",
+  );
 });
 
 it("parses Android accessibility bounds used by the keyboard regression", () => {
   const [node] = parseAndroidUiNodes(`<?xml version="1.0"?><hierarchy>
     <node text="" content-desc="Thread settings &amp; model" class="android.view.View"
-      visible-to-user="true" bounds="[12,840][420,900]" />
+      resource-id="thread-composer-sticky-view" visible-to-user="true"
+      bounds="[12,840][420,900]" />
   </hierarchy>`);
   assert.deepStrictEqual(node, {
     className: "android.view.View",
     contentDescription: "Thread settings & model",
+    resourceId: "thread-composer-sticky-view",
     text: "",
     visibleToUser: true,
     bounds: { left: 12, top: 840, right: 420, bottom: 900 },
   });
+});
+
+it("fails when the thread composer retains its keyboard-open offset after dismissal", () => {
+  assert.equal(
+    threadComposerFooterRecoveryFailure({
+      baselineBottom: 1900,
+      keyboardOpenBottom: 1120,
+      keyboardClosedBottom: 1120,
+    }),
+    "Thread composer remained 780px from its pre-keyboard position after the IME closed",
+  );
+});
+
+it("accepts the thread composer returning to its pre-keyboard position", () => {
+  assert.equal(
+    threadComposerFooterRecoveryFailure({
+      baselineBottom: 1900,
+      keyboardOpenBottom: 1120,
+      keyboardClosedBottom: 1896,
+    }),
+    null,
+  );
 });
 
 it("reads the visible IME boundary from Android window insets", () => {

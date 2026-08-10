@@ -151,7 +151,7 @@ const config: ShowcaseConfig = {
         density: 420,
       },
       scenes: ["thread", "terminal", "review", "threads", "environments"],
-      testScenes: ["new-task-keyboard"],
+      testScenes: ["new-task-keyboard", "thread-keyboard-dismiss"],
       storeAsset: {
         store: "google-play",
         directory: "google-play/phone",
