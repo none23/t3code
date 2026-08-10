@@ -99,6 +99,8 @@ interface AndroidCaptureCleanup {
   readonly device: ShowcaseAndroidDevice;
   readonly serial: string;
   readonly startedByRunner: boolean;
+  readonly physicalDevice: boolean;
+  readonly installedByRunner: boolean;
 }
 
 interface NetworkAddress {
@@ -168,13 +170,16 @@ export function parseAndroidUiNodes(xml: string): ReadonlyArray<AndroidUiNode> {
     const attributes = match[1] ?? "";
     const boundsValue = xmlAttribute(attributes, "bounds");
     const boundsMatch = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/u.exec(boundsValue);
+    const visibleToUser = xmlAttribute(attributes, "visible-to-user");
     return {
       className: xmlAttribute(attributes, "class"),
       contentDescription: xmlAttribute(attributes, "content-desc"),
       enabled: xmlAttribute(attributes, "enabled") === "true",
       resourceId: xmlAttribute(attributes, "resource-id"),
       text: xmlAttribute(attributes, "text"),
-      visibleToUser: xmlAttribute(attributes, "visible-to-user") === "true",
+      // Android 11's uiautomator dump omits this attribute. Its hierarchy is
+      // already limited to the active window, so only an explicit false is hidden.
+      visibleToUser: visibleToUser !== "false",
       bounds: boundsMatch
         ? {
             left: Number(boundsMatch[1]),
@@ -223,15 +228,18 @@ export function threadComposerKeyboardOpenFailure(input: {
 }
 
 export function parseVisibleAndroidImeTop(windowDump: string): number | null {
-  const sourceBlocks = windowDump.match(/InsetsSource[^\n]*(?:\n\s+[^\n]*){0,4}/gu) ?? [];
-  for (const block of sourceBlocks) {
-    if (!/(?:mType|type)=ime\b/u.test(block) || !/(?:mVisible|visible)=true\b/u.test(block)) {
-      continue;
+  const sourceLines = windowDump.match(/InsetsSource[^\n]*/gu) ?? [];
+  const visibleTops = sourceLines.flatMap((line) => {
+    if (
+      !/(?:mType|type)=(?:ime|ITYPE_IME)\b/u.test(line) ||
+      !/(?:mVisible|visible)=true\b/u.test(line)
+    ) {
+      return [];
     }
-    const frame = /(?:mFrame|frame)=\[-?\d+,(-?\d+)\]\[-?\d+,-?\d+\]/u.exec(block);
-    if (frame) return Number(frame[1]);
-  }
-  return null;
+    const frame = /(?:mFrame|frame)=\[-?\d+,(-?\d+)\]\[-?\d+,-?\d+\]/u.exec(line);
+    return frame ? [Number(frame[1])] : [];
+  });
+  return visibleTops.length > 0 ? Math.max(...visibleTops) : null;
 }
 
 export function newTaskComposerControlFailures(xml: string, imeTop: number): ReadonlyArray<string> {
@@ -586,7 +594,12 @@ async function commandOutput(
     NodeChildProcess.execFile(
       command,
       [...args],
-      { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 10 * 1024 * 1024, ...options },
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        maxBuffer: 10 * 1024 * 1024,
+        ...options,
+      },
       (error, stdout) => {
         if (error) reject(error);
         else resolve(String(stdout));
@@ -698,7 +711,9 @@ exit 1
 `;
   await Promise.all(
     ["scutil", "hostnamectl"].map((executable) =>
-      NodeFSP.writeFile(NodePath.join(binDirectory, executable), probeScript, { mode: 0o755 }),
+      NodeFSP.writeFile(NodePath.join(binDirectory, executable), probeScript, {
+        mode: 0o755,
+      }),
     ),
   );
   return binDirectory;
@@ -783,6 +798,20 @@ export function showcaseSceneUrl(scene: ShowcaseScene, environmentId: string): s
 
 export function encodeAndroidPairingUrls(pairingUrls: ReadonlyArray<string>): string {
   return `json-uri:${encodeURIComponent(JSON.stringify(pairingUrls))}`;
+}
+
+function configuredShowcasePairingUrls(): ReadonlyArray<string> | null {
+  const value = NodeProcess.env.T3_SHOWCASE_PAIRING_URLS?.trim();
+  if (!value) return null;
+  const parsed: unknown = JSON.parse(value);
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length === 0 ||
+    !parsed.every((candidate) => typeof candidate === "string" && candidate.length > 0)
+  ) {
+    throw new Error("T3_SHOWCASE_PAIRING_URLS must be a non-empty JSON array of URLs.");
+  }
+  return parsed;
 }
 
 function startMetro(config: ShowcaseConfig): NodeChildProcess.ChildProcess {
@@ -1480,8 +1509,15 @@ async function captureAndroid(
   pairingUrls: ReadonlyArray<string>,
   registerCleanup: (cleanup: AndroidCaptureCleanup) => void,
 ): Promise<void> {
-  const running = await runningAndroidAvds();
-  const existingSerial = running.get(capture.device.avd);
+  const requestedPhysicalSerial = NodeProcess.env.T3_SHOWCASE_ANDROID_SERIAL?.trim() || null;
+  if (requestedPhysicalSerial) {
+    const state = (await adbOutput(requestedPhysicalSerial, ["get-state"]).catch(() => "")).trim();
+    if (state !== "device") {
+      throw new Error(`Android device '${requestedPhysicalSerial}' is not connected over ADB.`);
+    }
+  }
+  const running = requestedPhysicalSerial ? new Map<string, string>() : await runningAndroidAvds();
+  const existingSerial = requestedPhysicalSerial ?? running.get(capture.device.avd);
   const startedByRunner = !existingSerial;
   let launchedEmulator: NodeChildProcess.ChildProcess | null = null;
   if (startedByRunner) {
@@ -1506,33 +1542,77 @@ async function captureAndroid(
       if (launchedEmulator) await stopProcess(launchedEmulator);
       throw error;
     }));
-  registerCleanup({ device: capture.device, serial, startedByRunner });
-  await normalizeAndroidEmulator(capture.device, capture.appearance, serial);
+  const packageWasInstalled = Boolean(
+    (await adbOutput(serial, ["shell", "pm", "path", ANDROID_PACKAGE]).catch(() => "")).trim(),
+  );
+  if (requestedPhysicalSerial && packageWasInstalled) {
+    if (apkPath) {
+      throw new Error(
+        `Refusing to replace ${ANDROID_PACKAGE} on physical device '${serial}'. Uninstall it or use a separate development build.`,
+      );
+    }
+    if (NodeProcess.env.T3_SHOWCASE_ANDROID_ALLOW_EXISTING_APP !== "1") {
+      throw new Error(
+        `Refusing to clear the existing ${ANDROID_PACKAGE} data on physical device '${serial}'. Set T3_SHOWCASE_ANDROID_ALLOW_EXISTING_APP=1 only for a disposable test install.`,
+      );
+    }
+  }
+  if (requestedPhysicalSerial && !packageWasInstalled && !apkPath) {
+    throw new Error(
+      `No ${ANDROID_PACKAGE} test build is installed on physical device '${serial}'.`,
+    );
+  }
+  const installedByRunner = Boolean(requestedPhysicalSerial && apkPath && !packageWasInstalled);
+  registerCleanup({
+    device: capture.device,
+    serial,
+    startedByRunner,
+    physicalDevice: requestedPhysicalSerial !== null,
+    installedByRunner,
+  });
+  if (!requestedPhysicalSerial) {
+    await normalizeAndroidEmulator(capture.device, capture.appearance, serial);
+  }
   if (apkPath) {
     await runAdb(serial, ["install", "-r", apkPath]);
   }
   await runAdb(serial, ["shell", "pm", "clear", ANDROID_PACKAGE]);
   await prepareAndroidShowcaseApp(serial);
-  await runAdb(serial, ["reverse", `tcp:${config.metroPort}`, `tcp:${config.metroPort}`]);
-  const metroUrl = encodeURIComponent(`http://127.0.0.1:${config.metroPort}?disableOnboarding=1`);
   const firstScene = capture.scenes[0] ?? "threads";
-  await runAdb(serial, [
-    "shell",
-    "am",
-    "start",
-    "-W",
-    "-a",
-    "android.intent.action.VIEW",
-    "-d",
-    `${APP_SCHEME}://expo-development-client/?url=${metroUrl}`,
+  const launchExtras = [
     "--es",
     "showcasePairingUrl",
     encodeAndroidPairingUrls(pairingUrls),
     "--es",
     "showcaseScene",
     firstScene,
-    ANDROID_PACKAGE,
-  ]);
+  ];
+  if (NodeProcess.env.T3_SHOWCASE_ANDROID_EMBEDDED === "1") {
+    await runAdb(serial, [
+      "shell",
+      "am",
+      "start",
+      "-W",
+      "-n",
+      `${ANDROID_PACKAGE}/.MainActivity`,
+      ...launchExtras,
+    ]);
+  } else {
+    await runAdb(serial, ["reverse", `tcp:${config.metroPort}`, `tcp:${config.metroPort}`]);
+    const metroUrl = encodeURIComponent(`http://127.0.0.1:${config.metroPort}?disableOnboarding=1`);
+    await runAdb(serial, [
+      "shell",
+      "am",
+      "start",
+      "-W",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      `${APP_SCHEME}://expo-development-client/?url=${metroUrl}`,
+      ...launchExtras,
+      ANDROID_PACKAGE,
+    ]);
+  }
   for (const [sceneIndex, scene] of capture.scenes.entries()) {
     if (sceneIndex > 0) await writeAndroidShowcaseScene(serial, scene);
     await waitForAndroidShowcaseScene(serial, scene);
@@ -1568,7 +1648,16 @@ async function captureAndroid(
       );
     });
     await NodeFSP.writeFile(destination, png);
-    await finalizeCapture(destination, capture.device);
+    if (requestedPhysicalSerial) {
+      const normalized = normalizeStorePng(png);
+      await NodeFSP.writeFile(destination, normalized);
+      const { width, height } = readPngDimensions(normalized);
+      NodeProcess.stdout.write(
+        `Captured ${NodePath.relative(REPO_ROOT, destination)} (${width}×${height}, physical device)\n`,
+      );
+    } else {
+      await finalizeCapture(destination, capture.device);
+    }
     if (regressionFailure !== null) throw regressionFailure;
   }
 }
@@ -1625,6 +1714,7 @@ async function main(): Promise<void> {
   const showcaseRootDir = await NodeFSP.mkdtemp(
     NodePath.join(NodeOS.tmpdir(), "t3-mobile-showcase-"),
   );
+  const externalPairingUrls = configuredShowcasePairingUrls();
   const showcaseServers: NodeChildProcess.ChildProcess[] = [];
   const showcaseEnvironments: Array<{
     readonly baseDir: string;
@@ -1637,7 +1727,7 @@ async function main(): Promise<void> {
   const androidCleanups: AndroidCaptureCleanup[] = [];
 
   try {
-    for (const environment of SHOWCASE_ENVIRONMENTS) {
+    for (const environment of externalPairingUrls ? [] : SHOWCASE_ENVIRONMENTS) {
       const projectId = environment.projectIds[0];
       const project = SHOWCASE_PROJECTS.find((candidate) => candidate.id === projectId);
       if (!project) throw new Error(`Showcase environment '${environment.id}' has no project.`);
@@ -1657,14 +1747,22 @@ async function main(): Promise<void> {
       );
       showcaseServers.push(server);
       await waitForPort(port, `${environment.label} server`);
-      await seedShowcaseEnvironment({ baseDir, projectIds: environment.projectIds });
+      await seedShowcaseEnvironment({
+        baseDir,
+        projectIds: environment.projectIds,
+      });
       // The server begins listening before the ServerEnvironment layer
       // persists the environment id, so poll rather than read once.
       const environmentId = await waitForFileContent(
         NodePath.join(baseDir, "userdata", "environment-id"),
         `${environment.label} environment id`,
       );
-      showcaseEnvironments.push({ baseDir, environmentId, label: environment.label, port });
+      showcaseEnvironments.push({
+        baseDir,
+        environmentId,
+        label: environment.label,
+        port,
+      });
     }
 
     if (!options.skipMetro) {
@@ -1691,13 +1789,20 @@ async function main(): Promise<void> {
       : null;
 
     for (const capture of captures) {
-      const pairingHost = capture.device.platform === "ios" ? "127.0.0.1" : "10.0.2.2";
-      const pairingUrls = await Promise.all(
-        showcaseEnvironments.map(async (environment) => {
-          const credential = await issuePairingCredential(environment.baseDir);
-          return buildShowcasePairingUrl(pairingHost, environment.port, credential);
-        }),
-      );
+      const pairingHost =
+        capture.device.platform === "ios"
+          ? "127.0.0.1"
+          : NodeProcess.env.T3_SHOWCASE_ANDROID_SERIAL
+            ? lanIpv4Address()
+            : "10.0.2.2";
+      const pairingUrls =
+        externalPairingUrls ??
+        (await Promise.all(
+          showcaseEnvironments.map(async (environment) => {
+            const credential = await issuePairingCredential(environment.baseDir);
+            return buildShowcasePairingUrl(pairingHost, environment.port, credential);
+          }),
+        ));
       if (capture.device.platform === "ios") {
         await captureIos(
           capture as ShowcaseCapture & { readonly device: ShowcaseIosDevice },
@@ -1710,7 +1815,9 @@ async function main(): Promise<void> {
         );
       } else {
         await captureAndroid(
-          capture as ShowcaseCapture & { readonly device: ShowcaseAndroidDevice },
+          capture as ShowcaseCapture & {
+            readonly device: ShowcaseAndroidDevice;
+          },
           androidApkPath,
           outputDirectory,
           showcaseConfig,
@@ -1718,11 +1825,13 @@ async function main(): Promise<void> {
           (cleanup) => androidCleanups.push(cleanup),
         );
       }
-      await validateCaptureSet(
-        capture,
-        outputDirectory,
-        capture.scenes.length === capture.device.scenes.length,
-      );
+      if (!NodeProcess.env.T3_SHOWCASE_ANDROID_SERIAL) {
+        await validateCaptureSet(
+          capture,
+          outputDirectory,
+          capture.scenes.length === capture.device.scenes.length,
+        );
+      }
     }
 
     NodeProcess.stdout.write(
@@ -1742,8 +1851,21 @@ async function main(): Promise<void> {
       for (const server of showcaseServers) server.unref();
     } else {
       for (const cleanup of androidCleanups) {
-        await cleanupAndroidViewport(cleanup.device, cleanup.serial).catch(() => undefined);
-        if (cleanup.startedByRunner) {
+        if (NodeProcess.env.T3_SHOWCASE_ANDROID_EMBEDDED !== "1") {
+          await runAdb(cleanup.serial, [
+            "reverse",
+            "--remove",
+            `tcp:${showcaseConfig.metroPort}`,
+          ]).catch(() => undefined);
+        }
+        if (cleanup.physicalDevice) {
+          if (cleanup.installedByRunner) {
+            await runAdb(cleanup.serial, ["uninstall", ANDROID_PACKAGE]).catch(() => undefined);
+          }
+        } else {
+          await cleanupAndroidViewport(cleanup.device, cleanup.serial).catch(() => undefined);
+        }
+        if (cleanup.startedByRunner && !cleanup.physicalDevice) {
           await runAdb(cleanup.serial, ["emu", "kill"]).catch(() => undefined);
         }
       }

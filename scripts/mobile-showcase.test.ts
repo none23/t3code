@@ -193,7 +193,10 @@ it("reads captured PNG dimensions from the IHDR header", () => {
   view.setUint32(20, 2868);
   view.setUint8(24, 8);
   view.setUint8(25, 2);
-  assert.deepStrictEqual(readPngDimensions(bytes), { width: 1320, height: 2868 });
+  assert.deepStrictEqual(readPngDimensions(bytes), {
+    width: 1320,
+    height: 2868,
+  });
   assert.deepStrictEqual(readPngMetadata(bytes), {
     width: 1320,
     height: 2868,
@@ -310,6 +313,14 @@ it("parses Android accessibility bounds used by the keyboard regression", () => 
   });
 });
 
+it("treats Android 11 accessibility nodes without visibility metadata as visible", () => {
+  const [node] = parseAndroidUiNodes(`<hierarchy>
+    <node class="android.widget.EditText" enabled="true" bounds="[12,840][420,900]" />
+  </hierarchy>`);
+
+  assert.equal(node?.visibleToUser, true);
+});
+
 it("fails when the thread composer retains its keyboard-open offset after dismissal", () => {
   assert.equal(
     threadComposerFooterRecoveryFailure({
@@ -367,6 +378,17 @@ it("reads the visible IME boundary from Android window insets", () => {
       "InsetsSource id=ime mType=ime mFrame=[0,1180][1080,2400] mVisible=false",
     ),
     null,
+  );
+  assert.equal(
+    parseVisibleAndroidImeTop("InsetsSource type=ITYPE_IME frame=[0,1429][1080,2340] visible=true"),
+    1429,
+  );
+  assert.equal(
+    parseVisibleAndroidImeTop(`
+      InsetsSource type=ITYPE_IME frame=[0,0][0,0] visible=true
+      InsetsSource type=ITYPE_IME frame=[0,1429][1080,2340] visible=true
+    `),
+    1429,
   );
 });
 
