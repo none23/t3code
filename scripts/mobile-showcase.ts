@@ -785,7 +785,7 @@ function buildShowcasePairingUrl(host: string, port: number, credential: string)
 export function showcaseSceneUrl(scene: ShowcaseScene, environmentId: string): string {
   if (scene === "threads") return `${APP_SCHEME}://`;
   if (scene === "environments") return `${APP_SCHEME}://settings/environments`;
-  if (scene === "new-task-keyboard") return `${APP_SCHEME}://new/draft`;
+  if (scene === "new-task-keyboard") return `${APP_SCHEME}://new`;
   const threadPath = `threads/${encodeURIComponent(environmentId)}/${SHOWCASE_THREAD_ID}`;
   if (scene === "thread" || scene === "thread-keyboard-dismiss") {
     return `${APP_SCHEME}://${threadPath}`;
@@ -1192,6 +1192,48 @@ async function waitForAndroidComposerEditor(
   throw new Error("The composer editor did not become visible.");
 }
 
+async function waitForAndroidUiNode(
+  serial: string,
+  label: string,
+  predicate: (node: AndroidUiNode) => boolean,
+  timeoutMs = 15_000,
+): Promise<NonNullable<AndroidUiNode["bounds"]>> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const xml = await dumpAndroidUi(serial).catch(() => "");
+    const node = parseAndroidUiNodes(xml).find(
+      (candidate) => candidate.visibleToUser && candidate.bounds !== null && predicate(candidate),
+    );
+    if (node?.bounds) return node.bounds;
+    await delay(250);
+  }
+  throw new Error(`${label} did not become visible.`);
+}
+
+async function tapAndroidBounds(
+  serial: string,
+  bounds: NonNullable<AndroidUiNode["bounds"]>,
+): Promise<void> {
+  await runAdb(serial, [
+    "shell",
+    "input",
+    "tap",
+    String(Math.round((bounds.left + bounds.right) / 2)),
+    String(Math.round((bounds.top + bounds.bottom) / 2)),
+  ]);
+}
+
+async function openAndroidNewTaskDraftThroughProjectPicker(serial: string): Promise<void> {
+  await waitForAndroidUiNode(serial, "The New Task project picker", (node) =>
+    [node.text, node.contentDescription].includes("Choose project"),
+  );
+  const project = await waitForAndroidUiNode(serial, "The T3 Code project", (node) =>
+    [node.text, node.contentDescription].includes(SHOWCASE_PROJECTS[0].title),
+  );
+  await tapAndroidBounds(serial, project);
+  await waitForAndroidComposerEditor(serial);
+}
+
 async function waitForAndroidThreadComposerBaseline(
   serial: string,
   timeoutMs = 15_000,
@@ -1251,13 +1293,7 @@ async function waitForAndroidComposerAction(
 
 async function assertAndroidNewTaskControlsAboveKeyboard(serial: string): Promise<void> {
   const editor = await waitForAndroidComposerEditor(serial);
-  await runAdb(serial, [
-    "shell",
-    "input",
-    "tap",
-    String(Math.round((editor.left + editor.right) / 2)),
-    String(Math.round((editor.top + editor.bottom) / 2)),
-  ]);
+  await tapAndroidBounds(serial, editor);
 
   const deadline = Date.now() + 10_000;
   let lastFailure = "The Android IME did not become visible.";
@@ -1615,6 +1651,12 @@ async function captureAndroid(
   }
   for (const [sceneIndex, scene] of capture.scenes.entries()) {
     if (sceneIndex > 0) await writeAndroidShowcaseScene(serial, scene);
+    if (scene === "new-task-keyboard") {
+      // Enter through the real project-picker transition. Resetting directly
+      // onto NewTaskDraft skips the Android layout timing that this regression
+      // exercises and can make an obscured toolbar look healthy.
+      await openAndroidNewTaskDraftThroughProjectPicker(serial);
+    }
     await waitForAndroidShowcaseScene(serial, scene);
     let regressionFailure: unknown = null;
     if (scene === "new-task-keyboard") {

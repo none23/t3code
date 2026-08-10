@@ -289,7 +289,7 @@ it("maps capture scenes to the real application routes", () => {
     showcaseSceneUrl("review", "environment-1"),
     "t3code://threads/environment-1/remote-command-center/review",
   );
-  assert.equal(showcaseSceneUrl("new-task-keyboard", "environment-1"), "t3code://new/draft");
+  assert.equal(showcaseSceneUrl("new-task-keyboard", "environment-1"), "t3code://new");
   assert.equal(
     showcaseSceneUrl("thread-keyboard-dismiss", "environment-1"),
     "t3code://threads/environment-1/remote-command-center",

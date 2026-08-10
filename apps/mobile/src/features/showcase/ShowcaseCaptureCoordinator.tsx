@@ -127,11 +127,6 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
     threads.some((thread) => String(thread.id) === SHOWCASE_THREAD_ID);
   const hasFixture = hasServerFixture && pendingTasksReady;
   const showcaseThread = threads.find((thread) => String(thread.id) === SHOWCASE_THREAD_ID);
-  const showcaseProject = projects.find(
-    (project) =>
-      project.environmentId === showcaseThread?.environmentId &&
-      project.id === showcaseThread.projectId,
-  );
 
   useEffect(() => {
     if (!SHOWCASE_ENABLED || !hasServerFixture || pendingTasksReady) return;
@@ -165,14 +160,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
   }, [hasServerFixture, pendingTasksReady, projects]);
 
   useEffect(() => {
-    if (
-      !SHOWCASE_ENABLED ||
-      requestedScene === null ||
-      !hasFixture ||
-      !showcaseThread ||
-      !showcaseProject
-    )
-      return;
+    if (!SHOWCASE_ENABLED || requestedScene === null || !hasFixture || !showcaseThread) return;
     if (scene === requestedScene) return;
 
     const params = {
@@ -203,18 +191,8 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
       routes.push({
         name: "NewTaskSheet",
         state: {
-          index: 1,
-          routes: [
-            { name: "NewTask" },
-            {
-              name: "NewTaskDraft",
-              params: {
-                environmentId: String(showcaseProject.environmentId),
-                projectId: String(showcaseProject.id),
-                title: showcaseProject.title,
-              },
-            },
-          ],
+          index: 0,
+          routes: [{ name: "NewTask" }],
         },
       });
     } else {
@@ -234,7 +212,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
         routes,
       }),
     );
-  }, [hasFixture, navigation, requestedScene, scene, showcaseProject, showcaseThread]);
+  }, [hasFixture, navigation, requestedScene, scene, showcaseThread]);
 
   useEffect(() => {
     if (
