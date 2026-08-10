@@ -32,7 +32,6 @@ function sceneFromPathname(pathname: string): ShowcaseScene | null {
   }
   if (routePath.endsWith("/terminal")) return "terminal";
   if (routePath.endsWith("/review")) return "review";
-  if (routePath.endsWith("/new/draft")) return "new-task-keyboard";
   if (routePath.startsWith("/threads/")) return "thread";
   if (routePath === "/") return "threads";
   return null;
@@ -115,11 +114,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
     };
   }, [connectPairingUrl, pairingUrls]);
 
-  const pathnameScene = sceneFromPathname(props.pathname);
-  const scene =
-    pathnameScene === "thread" && requestedScene === "thread-keyboard-dismiss"
-      ? requestedScene
-      : pathnameScene;
+  const scene = sceneFromPathname(props.pathname);
   const hasServerFixture =
     workspace.state.hasReadyEnvironment &&
     workspace.environments.length >= 3 &&
@@ -174,10 +169,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
     const routes: Array<{
       name: string;
       params?: Record<string, unknown>;
-      state?: {
-        index: number;
-        routes: Array<{ name: string; params?: Record<string, unknown> }>;
-      };
+      state?: { index: number; routes: Array<{ name: string }> };
     }> = [{ name: "Home" }];
     if (requestedScene === "environments") {
       routes.push({
@@ -185,14 +177,6 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
         state: {
           index: 1,
           routes: [{ name: "Settings" }, { name: "SettingsEnvironments" }],
-        },
-      });
-    } else if (requestedScene === "new-task-keyboard") {
-      routes.push({
-        name: "NewTaskSheet",
-        state: {
-          index: 0,
-          routes: [{ name: "NewTask" }],
         },
       });
     } else {
@@ -234,7 +218,7 @@ export function ShowcaseCaptureCoordinator(props: { readonly pathname: string })
       setReadyScene(null);
       return;
     }
-    if (scene === "terminal" || scene === "thread-keyboard-dismiss") Keyboard.dismiss();
+    if (scene === "terminal") Keyboard.dismiss();
 
     let renderFrame: number | null = null;
     let readyFrame: number | null = null;

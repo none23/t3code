@@ -919,7 +919,6 @@ export function NewTaskDraftScreen(props: {
   const toolbarPills = (
     <>
       <ComposerToolbarButton
-        accessibilityLabel="Add image"
         icon="plus"
         onPress={() => void handlePickImages()}
         showChevron={false}

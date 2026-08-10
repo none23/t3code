@@ -99,8 +99,6 @@ interface AndroidCaptureCleanup {
   readonly device: ShowcaseAndroidDevice;
   readonly serial: string;
   readonly startedByRunner: boolean;
-  readonly physicalDevice: boolean;
-  readonly installedByRunner: boolean;
 }
 
 interface NetworkAddress {
@@ -134,136 +132,6 @@ export interface PngMetadata {
   readonly bitDepth: number;
   readonly colorType: number;
   readonly hasAlpha: boolean;
-}
-
-export interface AndroidUiNode {
-  readonly className: string;
-  readonly contentDescription: string;
-  readonly enabled: boolean;
-  readonly resourceId: string;
-  readonly text: string;
-  readonly visibleToUser: boolean;
-  readonly bounds: {
-    readonly left: number;
-    readonly top: number;
-    readonly right: number;
-    readonly bottom: number;
-  } | null;
-}
-
-function decodeXmlAttribute(value: string): string {
-  return value
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
-}
-
-function xmlAttribute(attributes: string, name: string): string {
-  const match = new RegExp(`(?:^|\\s)${name}="([^"]*)"`, "u").exec(attributes);
-  return match ? decodeXmlAttribute(match[1] ?? "") : "";
-}
-
-export function parseAndroidUiNodes(xml: string): ReadonlyArray<AndroidUiNode> {
-  return [...xml.matchAll(/<node\s+([^>]+)>?/gu)].map((match) => {
-    const attributes = match[1] ?? "";
-    const boundsValue = xmlAttribute(attributes, "bounds");
-    const boundsMatch = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/u.exec(boundsValue);
-    const visibleToUser = xmlAttribute(attributes, "visible-to-user");
-    return {
-      className: xmlAttribute(attributes, "class"),
-      contentDescription: xmlAttribute(attributes, "content-desc"),
-      enabled: xmlAttribute(attributes, "enabled") === "true",
-      resourceId: xmlAttribute(attributes, "resource-id"),
-      text: xmlAttribute(attributes, "text"),
-      // Android 11's uiautomator dump omits this attribute. Its hierarchy is
-      // already limited to the active window, so only an explicit false is hidden.
-      visibleToUser: visibleToUser !== "false",
-      bounds: boundsMatch
-        ? {
-            left: Number(boundsMatch[1]),
-            top: Number(boundsMatch[2]),
-            right: Number(boundsMatch[3]),
-            bottom: Number(boundsMatch[4]),
-          }
-        : null,
-    };
-  });
-}
-
-function androidUiNodeHasTestId(node: AndroidUiNode, testId: string): boolean {
-  return node.resourceId === testId || node.resourceId.endsWith(`:id/${testId}`);
-}
-
-export function threadComposerFooterRecoveryFailure(input: {
-  readonly baselineBottom: number;
-  readonly keyboardOpenBottom: number;
-  readonly keyboardClosedBottom: number;
-}): string | null {
-  const keyboardOffset = input.baselineBottom - input.keyboardOpenBottom;
-  if (keyboardOffset <= 0) {
-    return "Thread composer did not move upward with the Android keyboard";
-  }
-
-  const recoveryError = Math.abs(input.keyboardClosedBottom - input.baselineBottom);
-  const tolerance = Math.max(8, Math.round(keyboardOffset * 0.05));
-  if (recoveryError > tolerance) {
-    return `Thread composer remained ${recoveryError}px from its pre-keyboard position after the IME closed`;
-  }
-  return null;
-}
-
-export function threadComposerKeyboardOpenFailure(input: {
-  readonly baselineBottom: number;
-  readonly keyboardOpenBottom: number;
-  readonly imeTop: number;
-}): string | null {
-  const expectedOffset = input.baselineBottom - input.imeTop;
-  const actualOffset = input.baselineBottom - input.keyboardOpenBottom;
-  if (expectedOffset <= 0 || actualOffset < expectedOffset * 0.8) {
-    return `Thread composer moved ${Math.max(0, actualOffset)}px of the expected ${Math.max(0, expectedOffset)}px keyboard offset`;
-  }
-  return null;
-}
-
-export function parseVisibleAndroidImeTop(windowDump: string): number | null {
-  const sourceLines = windowDump.match(/InsetsSource[^\n]*/gu) ?? [];
-  const visibleTops = sourceLines.flatMap((line) => {
-    if (
-      !/(?:mType|type)=(?:ime|ITYPE_IME)\b/u.test(line) ||
-      !/(?:mVisible|visible)=true\b/u.test(line)
-    ) {
-      return [];
-    }
-    const frame = /(?:mFrame|frame)=\[-?\d+,(-?\d+)\]\[-?\d+,-?\d+\]/u.exec(line);
-    return frame ? [Number(frame[1])] : [];
-  });
-  return visibleTops.length > 0 ? Math.max(...visibleTops) : null;
-}
-
-export function newTaskComposerControlFailures(xml: string, imeTop: number): ReadonlyArray<string> {
-  const nodes = parseAndroidUiNodes(xml);
-  const controls = [
-    { name: "Add image", labels: ["Add image"] },
-    { name: "Thread settings", labels: ["Thread settings"] },
-    { name: "Submit", labels: ["Start task", "Queue task"] },
-  ];
-  return controls.flatMap((control) => {
-    const candidates = nodes.filter((node) => control.labels.includes(node.contentDescription));
-    if (candidates.length === 0) return [`${control.name} is absent from the Android UI hierarchy`];
-    if (!candidates.some((node) => node.visibleToUser)) {
-      return [`${control.name} is not visible to the user`];
-    }
-    if (
-      !candidates.some(
-        (node) => node.visibleToUser && node.bounds !== null && node.bounds.bottom <= imeTop,
-      )
-    ) {
-      return [`${control.name} extends below the IME top (${imeTop}px)`];
-    }
-    return [];
-  });
 }
 
 export function readPngMetadata(bytes: Uint8Array): PngMetadata {
@@ -496,10 +364,7 @@ export function planShowcaseCaptures(
         scenes:
           options.scenes.size === 0
             ? device.scenes
-            : [
-                ...device.scenes,
-                ...(device.platform === "android" ? (device.testScenes ?? []) : []),
-              ].filter((scene) => options.scenes.has(scene)),
+            : device.scenes.filter((scene) => options.scenes.has(scene)),
       }));
     })
     .filter((capture) => capture.scenes.length > 0);
@@ -540,11 +405,7 @@ Configured devices:
 ${config.devices
   .map((device) => {
     const target = device.platform === "ios" ? device.simulator : device.avd;
-    const testScenes = device.platform === "android" ? (device.testScenes ?? []) : [];
-    const sceneSummary = [...device.scenes, ...testScenes.map((scene) => `${scene} (test)`)].join(
-      ", ",
-    );
-    return `  ${device.id.padEnd(18)} ${device.platform.padEnd(8)} ${target} -> ${device.storeAsset.directory}/{light|dark} (${device.storeAsset.width}×${device.storeAsset.height}, default ${device.appearance}) [${sceneSummary}]`;
+    return `  ${device.id.padEnd(18)} ${device.platform.padEnd(8)} ${target} -> ${device.storeAsset.directory}/{light|dark} (${device.storeAsset.width}×${device.storeAsset.height}, default ${device.appearance}) [${device.scenes.join(", ")}]`;
   })
   .join("\n")}
 `);
@@ -594,12 +455,7 @@ async function commandOutput(
     NodeChildProcess.execFile(
       command,
       [...args],
-      {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        maxBuffer: 10 * 1024 * 1024,
-        ...options,
-      },
+      { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 10 * 1024 * 1024, ...options },
       (error, stdout) => {
         if (error) reject(error);
         else resolve(String(stdout));
@@ -711,9 +567,7 @@ exit 1
 `;
   await Promise.all(
     ["scutil", "hostnamectl"].map((executable) =>
-      NodeFSP.writeFile(NodePath.join(binDirectory, executable), probeScript, {
-        mode: 0o755,
-      }),
+      NodeFSP.writeFile(NodePath.join(binDirectory, executable), probeScript, { mode: 0o755 }),
     ),
   );
   return binDirectory;
@@ -785,11 +639,8 @@ function buildShowcasePairingUrl(host: string, port: number, credential: string)
 export function showcaseSceneUrl(scene: ShowcaseScene, environmentId: string): string {
   if (scene === "threads") return `${APP_SCHEME}://`;
   if (scene === "environments") return `${APP_SCHEME}://settings/environments`;
-  if (scene === "new-task-keyboard") return `${APP_SCHEME}://new`;
   const threadPath = `threads/${encodeURIComponent(environmentId)}/${SHOWCASE_THREAD_ID}`;
-  if (scene === "thread" || scene === "thread-keyboard-dismiss") {
-    return `${APP_SCHEME}://${threadPath}`;
-  }
+  if (scene === "thread") return `${APP_SCHEME}://${threadPath}`;
   if (scene === "terminal") {
     return `${APP_SCHEME}://${threadPath}/terminal?terminalId=${SHOWCASE_TERMINAL_ID}`;
   }
@@ -798,20 +649,6 @@ export function showcaseSceneUrl(scene: ShowcaseScene, environmentId: string): s
 
 export function encodeAndroidPairingUrls(pairingUrls: ReadonlyArray<string>): string {
   return `json-uri:${encodeURIComponent(JSON.stringify(pairingUrls))}`;
-}
-
-function configuredShowcasePairingUrls(): ReadonlyArray<string> | null {
-  const value = NodeProcess.env.T3_SHOWCASE_PAIRING_URLS?.trim();
-  if (!value) return null;
-  const parsed: unknown = JSON.parse(value);
-  if (
-    !Array.isArray(parsed) ||
-    parsed.length === 0 ||
-    !parsed.every((candidate) => typeof candidate === "string" && candidate.length > 0)
-  ) {
-    throw new Error("T3_SHOWCASE_PAIRING_URLS must be a non-empty JSON array of URLs.");
-  }
-  return parsed;
 }
 
 function startMetro(config: ShowcaseConfig): NodeChildProcess.ChildProcess {
@@ -1169,235 +1006,6 @@ async function runAdb(serial: string, args: ReadonlyArray<string>): Promise<void
   await runCommand(androidSdkTool("platform-tools/adb"), ["-s", serial, ...args]);
 }
 
-async function dumpAndroidUi(serial: string): Promise<string> {
-  const path = "/data/local/tmp/t3-mobile-showcase.xml";
-  await adbOutput(serial, ["shell", "uiautomator", "dump", path]);
-  return await adbOutput(serial, ["shell", "cat", path]);
-}
-
-async function waitForAndroidComposerEditor(
-  serial: string,
-  timeoutMs = 15_000,
-): Promise<NonNullable<AndroidUiNode["bounds"]>> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const xml = await dumpAndroidUi(serial).catch(() => "");
-    const editor = parseAndroidUiNodes(xml).find(
-      (node) =>
-        node.className === "android.widget.EditText" && node.visibleToUser && node.bounds !== null,
-    );
-    if (editor?.bounds) return editor.bounds;
-    await delay(250);
-  }
-  throw new Error("The composer editor did not become visible.");
-}
-
-async function waitForAndroidUiNode(
-  serial: string,
-  label: string,
-  predicate: (node: AndroidUiNode) => boolean,
-  timeoutMs = 15_000,
-): Promise<NonNullable<AndroidUiNode["bounds"]>> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const xml = await dumpAndroidUi(serial).catch(() => "");
-    const node = parseAndroidUiNodes(xml).find(
-      (candidate) => candidate.visibleToUser && candidate.bounds !== null && predicate(candidate),
-    );
-    if (node?.bounds) return node.bounds;
-    await delay(250);
-  }
-  throw new Error(`${label} did not become visible.`);
-}
-
-async function tapAndroidBounds(
-  serial: string,
-  bounds: NonNullable<AndroidUiNode["bounds"]>,
-): Promise<void> {
-  await runAdb(serial, [
-    "shell",
-    "input",
-    "tap",
-    String(Math.round((bounds.left + bounds.right) / 2)),
-    String(Math.round((bounds.top + bounds.bottom) / 2)),
-  ]);
-}
-
-async function openAndroidNewTaskDraftThroughProjectPicker(serial: string): Promise<void> {
-  await waitForAndroidUiNode(serial, "The New Task project picker", (node) =>
-    [node.text, node.contentDescription].includes("Choose project"),
-  );
-  const project = await waitForAndroidUiNode(serial, "The T3 Code project", (node) =>
-    [node.text, node.contentDescription].includes(SHOWCASE_PROJECTS[0].title),
-  );
-  await tapAndroidBounds(serial, project);
-  await waitForAndroidComposerEditor(serial);
-}
-
-async function waitForAndroidThreadComposerBaseline(
-  serial: string,
-  timeoutMs = 15_000,
-): Promise<NonNullable<AndroidUiNode["bounds"]>> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const [windowDump, xml] = await Promise.all([
-      adbOutput(serial, ["shell", "dumpsys", "window"]),
-      dumpAndroidUi(serial).catch(() => ""),
-    ]);
-    const composer = parseAndroidUiNodes(xml).find(
-      (node) =>
-        androidUiNodeHasTestId(node, "thread-composer-sticky-view") &&
-        node.visibleToUser &&
-        node.bounds !== null,
-    );
-    if (parseVisibleAndroidImeTop(windowDump) === null && composer?.bounds) {
-      return composer.bounds;
-    }
-    await delay(250);
-  }
-  throw new Error("The closed-keyboard thread composer did not become visible.");
-}
-
-function visibleAndroidThreadComposerBounds(
-  xml: string,
-): NonNullable<AndroidUiNode["bounds"]> | null {
-  const composer = parseAndroidUiNodes(xml).find(
-    (node) =>
-      androidUiNodeHasTestId(node, "thread-composer-sticky-view") &&
-      node.visibleToUser &&
-      node.bounds !== null,
-  );
-  return composer?.bounds ?? null;
-}
-
-async function waitForAndroidComposerAction(
-  serial: string,
-  labels: ReadonlyArray<string>,
-  timeoutMs = 10_000,
-): Promise<NonNullable<AndroidUiNode["bounds"]>> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const xml = await dumpAndroidUi(serial).catch(() => "");
-    const action = parseAndroidUiNodes(xml).find(
-      (node) =>
-        labels.includes(node.contentDescription) &&
-        node.enabled &&
-        node.visibleToUser &&
-        node.bounds !== null,
-    );
-    if (action?.bounds) return action.bounds;
-    await delay(250);
-  }
-  throw new Error(`The composer action '${labels.join("' or '")}' did not become visible.`);
-}
-
-async function assertAndroidNewTaskControlsAboveKeyboard(serial: string): Promise<void> {
-  const editor = await waitForAndroidComposerEditor(serial);
-  await tapAndroidBounds(serial, editor);
-
-  const deadline = Date.now() + 10_000;
-  let lastFailure = "The Android IME did not become visible.";
-  while (Date.now() < deadline) {
-    const [windowDump, xml] = await Promise.all([
-      adbOutput(serial, ["shell", "dumpsys", "window"]),
-      dumpAndroidUi(serial).catch(() => ""),
-    ]);
-    const imeTop = parseVisibleAndroidImeTop(windowDump);
-    if (imeTop !== null) {
-      const failures = newTaskComposerControlFailures(xml, imeTop);
-      if (failures.length === 0) return;
-      lastFailure = failures.join("; ");
-    }
-    await delay(250);
-  }
-  throw new Error(`New Thread controls are obscured by the Android keyboard: ${lastFailure}`);
-}
-
-async function assertAndroidThreadComposerReturnsAfterKeyboardDismiss(
-  serial: string,
-): Promise<void> {
-  const baseline = await waitForAndroidThreadComposerBaseline(serial);
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const editor = await waitForAndroidComposerEditor(serial);
-    await runAdb(serial, [
-      "shell",
-      "input",
-      "tap",
-      String(Math.round((editor.left + editor.right) / 2)),
-      String(Math.round((editor.top + editor.bottom) / 2)),
-    ]);
-    await runAdb(serial, ["shell", "input", "text", `keyboard-regression-${attempt}`]);
-
-    const openDeadline = Date.now() + 10_000;
-    let keyboardOpenBottom: number | null = null;
-    let lastOpenFailure = "The Android IME did not become visible.";
-    while (Date.now() < openDeadline) {
-      const [windowDump, xml] = await Promise.all([
-        adbOutput(serial, ["shell", "dumpsys", "window"]),
-        dumpAndroidUi(serial).catch(() => ""),
-      ]);
-      const imeTop = parseVisibleAndroidImeTop(windowDump);
-      const composer = visibleAndroidThreadComposerBounds(xml);
-      if (imeTop !== null && composer) {
-        lastOpenFailure =
-          threadComposerKeyboardOpenFailure({
-            baselineBottom: baseline.bottom,
-            keyboardOpenBottom: composer.bottom,
-            imeTop,
-          }) ?? "";
-        if (lastOpenFailure === "") {
-          keyboardOpenBottom = composer.bottom;
-          break;
-        }
-      } else if (imeTop !== null) {
-        lastOpenFailure = "The thread composer disappeared behind the Android keyboard.";
-      }
-      await delay(250);
-    }
-    if (keyboardOpenBottom === null) {
-      throw new Error(
-        `Thread composer was obscured with the keyboard open on send ${attempt}: ${lastOpenFailure}`,
-      );
-    }
-
-    const send = await waitForAndroidComposerAction(serial, ["Send", "Queue"]);
-    await runAdb(serial, [
-      "shell",
-      "input",
-      "tap",
-      String(Math.round((send.left + send.right) / 2)),
-      String(Math.round((send.top + send.bottom) / 2)),
-    ]);
-
-    const closedDeadline = Date.now() + 10_000;
-    let lastClosedFailure = "The Android IME remained visible after sending.";
-    while (Date.now() < closedDeadline) {
-      const [windowDump, xml] = await Promise.all([
-        adbOutput(serial, ["shell", "dumpsys", "window"]),
-        dumpAndroidUi(serial).catch(() => ""),
-      ]);
-      if (parseVisibleAndroidImeTop(windowDump) === null) {
-        const composer = visibleAndroidThreadComposerBounds(xml);
-        if (composer) {
-          lastClosedFailure =
-            threadComposerFooterRecoveryFailure({
-              baselineBottom: baseline.bottom,
-              keyboardOpenBottom,
-              keyboardClosedBottom: composer.bottom,
-            }) ?? "";
-          if (lastClosedFailure === "") break;
-        } else {
-          lastClosedFailure = "The thread composer disappeared after sending.";
-        }
-      }
-      await delay(250);
-    }
-    if (lastClosedFailure !== "") {
-      throw new Error(`Thread composer did not return after send ${attempt}: ${lastClosedFailure}`);
-    }
-  }
-}
-
 async function runningAndroidAvds(): Promise<ReadonlyMap<string, string>> {
   const adb = androidSdkTool("platform-tools/adb");
   const devices = (await commandOutput(adb, ["devices"]))
@@ -1545,15 +1153,8 @@ async function captureAndroid(
   pairingUrls: ReadonlyArray<string>,
   registerCleanup: (cleanup: AndroidCaptureCleanup) => void,
 ): Promise<void> {
-  const requestedPhysicalSerial = NodeProcess.env.T3_SHOWCASE_ANDROID_SERIAL?.trim() || null;
-  if (requestedPhysicalSerial) {
-    const state = (await adbOutput(requestedPhysicalSerial, ["get-state"]).catch(() => "")).trim();
-    if (state !== "device") {
-      throw new Error(`Android device '${requestedPhysicalSerial}' is not connected over ADB.`);
-    }
-  }
-  const running = requestedPhysicalSerial ? new Map<string, string>() : await runningAndroidAvds();
-  const existingSerial = requestedPhysicalSerial ?? running.get(capture.device.avd);
+  const running = await runningAndroidAvds();
+  const existingSerial = running.get(capture.device.avd);
   const startedByRunner = !existingSerial;
   let launchedEmulator: NodeChildProcess.ChildProcess | null = null;
   if (startedByRunner) {
@@ -1578,102 +1179,37 @@ async function captureAndroid(
       if (launchedEmulator) await stopProcess(launchedEmulator);
       throw error;
     }));
-  const packageWasInstalled = Boolean(
-    (await adbOutput(serial, ["shell", "pm", "path", ANDROID_PACKAGE]).catch(() => "")).trim(),
-  );
-  if (requestedPhysicalSerial && packageWasInstalled) {
-    if (apkPath) {
-      throw new Error(
-        `Refusing to replace ${ANDROID_PACKAGE} on physical device '${serial}'. Uninstall it or use a separate development build.`,
-      );
-    }
-    if (NodeProcess.env.T3_SHOWCASE_ANDROID_ALLOW_EXISTING_APP !== "1") {
-      throw new Error(
-        `Refusing to clear the existing ${ANDROID_PACKAGE} data on physical device '${serial}'. Set T3_SHOWCASE_ANDROID_ALLOW_EXISTING_APP=1 only for a disposable test install.`,
-      );
-    }
-  }
-  if (requestedPhysicalSerial && !packageWasInstalled && !apkPath) {
-    throw new Error(
-      `No ${ANDROID_PACKAGE} test build is installed on physical device '${serial}'.`,
-    );
-  }
-  const installedByRunner = Boolean(requestedPhysicalSerial && apkPath && !packageWasInstalled);
-  registerCleanup({
-    device: capture.device,
-    serial,
-    startedByRunner,
-    physicalDevice: requestedPhysicalSerial !== null,
-    installedByRunner,
-  });
-  if (!requestedPhysicalSerial) {
-    await normalizeAndroidEmulator(capture.device, capture.appearance, serial);
-  }
+  registerCleanup({ device: capture.device, serial, startedByRunner });
+  await normalizeAndroidEmulator(capture.device, capture.appearance, serial);
   if (apkPath) {
     await runAdb(serial, ["install", "-r", apkPath]);
   }
   await runAdb(serial, ["shell", "pm", "clear", ANDROID_PACKAGE]);
   await prepareAndroidShowcaseApp(serial);
+  await runAdb(serial, ["reverse", `tcp:${config.metroPort}`, `tcp:${config.metroPort}`]);
+  const metroUrl = encodeURIComponent(`http://127.0.0.1:${config.metroPort}?disableOnboarding=1`);
   const firstScene = capture.scenes[0] ?? "threads";
-  const launchExtras = [
+  await runAdb(serial, [
+    "shell",
+    "am",
+    "start",
+    "-W",
+    "-a",
+    "android.intent.action.VIEW",
+    "-d",
+    `${APP_SCHEME}://expo-development-client/?url=${metroUrl}`,
     "--es",
     "showcasePairingUrl",
     encodeAndroidPairingUrls(pairingUrls),
     "--es",
     "showcaseScene",
     firstScene,
-  ];
-  if (NodeProcess.env.T3_SHOWCASE_ANDROID_EMBEDDED === "1") {
-    await runAdb(serial, [
-      "shell",
-      "am",
-      "start",
-      "-W",
-      "-n",
-      `${ANDROID_PACKAGE}/.MainActivity`,
-      ...launchExtras,
-    ]);
-  } else {
-    await runAdb(serial, ["reverse", `tcp:${config.metroPort}`, `tcp:${config.metroPort}`]);
-    const metroUrl = encodeURIComponent(`http://127.0.0.1:${config.metroPort}?disableOnboarding=1`);
-    await runAdb(serial, [
-      "shell",
-      "am",
-      "start",
-      "-W",
-      "-a",
-      "android.intent.action.VIEW",
-      "-d",
-      `${APP_SCHEME}://expo-development-client/?url=${metroUrl}`,
-      ...launchExtras,
-      ANDROID_PACKAGE,
-    ]);
-  }
+    ANDROID_PACKAGE,
+  ]);
   for (const [sceneIndex, scene] of capture.scenes.entries()) {
     if (sceneIndex > 0) await writeAndroidShowcaseScene(serial, scene);
-    if (scene === "new-task-keyboard") {
-      // Enter through the real project-picker transition. Resetting directly
-      // onto NewTaskDraft skips the Android layout timing that this regression
-      // exercises and can make an obscured toolbar look healthy.
-      await openAndroidNewTaskDraftThroughProjectPicker(serial);
-    }
     await waitForAndroidShowcaseScene(serial, scene);
-    let regressionFailure: unknown = null;
-    if (scene === "new-task-keyboard") {
-      try {
-        await assertAndroidNewTaskControlsAboveKeyboard(serial);
-      } catch (error) {
-        regressionFailure = error;
-      }
-    } else if (scene === "thread-keyboard-dismiss") {
-      try {
-        await assertAndroidThreadComposerReturnsAfterKeyboardDismiss(serial);
-      } catch (error) {
-        regressionFailure = error;
-      }
-    } else {
-      await delay(Math.max(config.settleDelayMs, scene === "review" ? 8_000 : 5_000));
-    }
+    await delay(Math.max(config.settleDelayMs, scene === "review" ? 8_000 : 5_000));
     const destination = NodePath.join(
       showcaseCaptureDirectory(outputDirectory, capture),
       `${scene}.png`,
@@ -1690,17 +1226,7 @@ async function captureAndroid(
       );
     });
     await NodeFSP.writeFile(destination, png);
-    if (requestedPhysicalSerial) {
-      const normalized = normalizeStorePng(png);
-      await NodeFSP.writeFile(destination, normalized);
-      const { width, height } = readPngDimensions(normalized);
-      NodeProcess.stdout.write(
-        `Captured ${NodePath.relative(REPO_ROOT, destination)} (${width}×${height}, physical device)\n`,
-      );
-    } else {
-      await finalizeCapture(destination, capture.device);
-    }
-    if (regressionFailure !== null) throw regressionFailure;
+    await finalizeCapture(destination, capture.device);
   }
 }
 
@@ -1756,7 +1282,6 @@ async function main(): Promise<void> {
   const showcaseRootDir = await NodeFSP.mkdtemp(
     NodePath.join(NodeOS.tmpdir(), "t3-mobile-showcase-"),
   );
-  const externalPairingUrls = configuredShowcasePairingUrls();
   const showcaseServers: NodeChildProcess.ChildProcess[] = [];
   const showcaseEnvironments: Array<{
     readonly baseDir: string;
@@ -1769,7 +1294,7 @@ async function main(): Promise<void> {
   const androidCleanups: AndroidCaptureCleanup[] = [];
 
   try {
-    for (const environment of externalPairingUrls ? [] : SHOWCASE_ENVIRONMENTS) {
+    for (const environment of SHOWCASE_ENVIRONMENTS) {
       const projectId = environment.projectIds[0];
       const project = SHOWCASE_PROJECTS.find((candidate) => candidate.id === projectId);
       if (!project) throw new Error(`Showcase environment '${environment.id}' has no project.`);
@@ -1789,22 +1314,14 @@ async function main(): Promise<void> {
       );
       showcaseServers.push(server);
       await waitForPort(port, `${environment.label} server`);
-      await seedShowcaseEnvironment({
-        baseDir,
-        projectIds: environment.projectIds,
-      });
+      await seedShowcaseEnvironment({ baseDir, projectIds: environment.projectIds });
       // The server begins listening before the ServerEnvironment layer
       // persists the environment id, so poll rather than read once.
       const environmentId = await waitForFileContent(
         NodePath.join(baseDir, "userdata", "environment-id"),
         `${environment.label} environment id`,
       );
-      showcaseEnvironments.push({
-        baseDir,
-        environmentId,
-        label: environment.label,
-        port,
-      });
+      showcaseEnvironments.push({ baseDir, environmentId, label: environment.label, port });
     }
 
     if (!options.skipMetro) {
@@ -1831,20 +1348,13 @@ async function main(): Promise<void> {
       : null;
 
     for (const capture of captures) {
-      const pairingHost =
-        capture.device.platform === "ios"
-          ? "127.0.0.1"
-          : NodeProcess.env.T3_SHOWCASE_ANDROID_SERIAL
-            ? lanIpv4Address()
-            : "10.0.2.2";
-      const pairingUrls =
-        externalPairingUrls ??
-        (await Promise.all(
-          showcaseEnvironments.map(async (environment) => {
-            const credential = await issuePairingCredential(environment.baseDir);
-            return buildShowcasePairingUrl(pairingHost, environment.port, credential);
-          }),
-        ));
+      const pairingHost = capture.device.platform === "ios" ? "127.0.0.1" : "10.0.2.2";
+      const pairingUrls = await Promise.all(
+        showcaseEnvironments.map(async (environment) => {
+          const credential = await issuePairingCredential(environment.baseDir);
+          return buildShowcasePairingUrl(pairingHost, environment.port, credential);
+        }),
+      );
       if (capture.device.platform === "ios") {
         await captureIos(
           capture as ShowcaseCapture & { readonly device: ShowcaseIosDevice },
@@ -1857,9 +1367,7 @@ async function main(): Promise<void> {
         );
       } else {
         await captureAndroid(
-          capture as ShowcaseCapture & {
-            readonly device: ShowcaseAndroidDevice;
-          },
+          capture as ShowcaseCapture & { readonly device: ShowcaseAndroidDevice },
           androidApkPath,
           outputDirectory,
           showcaseConfig,
@@ -1867,13 +1375,11 @@ async function main(): Promise<void> {
           (cleanup) => androidCleanups.push(cleanup),
         );
       }
-      if (!NodeProcess.env.T3_SHOWCASE_ANDROID_SERIAL) {
-        await validateCaptureSet(
-          capture,
-          outputDirectory,
-          capture.scenes.length === capture.device.scenes.length,
-        );
-      }
+      await validateCaptureSet(
+        capture,
+        outputDirectory,
+        capture.scenes.length === capture.device.scenes.length,
+      );
     }
 
     NodeProcess.stdout.write(
@@ -1893,21 +1399,8 @@ async function main(): Promise<void> {
       for (const server of showcaseServers) server.unref();
     } else {
       for (const cleanup of androidCleanups) {
-        if (NodeProcess.env.T3_SHOWCASE_ANDROID_EMBEDDED !== "1") {
-          await runAdb(cleanup.serial, [
-            "reverse",
-            "--remove",
-            `tcp:${showcaseConfig.metroPort}`,
-          ]).catch(() => undefined);
-        }
-        if (cleanup.physicalDevice) {
-          if (cleanup.installedByRunner) {
-            await runAdb(cleanup.serial, ["uninstall", ANDROID_PACKAGE]).catch(() => undefined);
-          }
-        } else {
-          await cleanupAndroidViewport(cleanup.device, cleanup.serial).catch(() => undefined);
-        }
-        if (cleanup.startedByRunner && !cleanup.physicalDevice) {
+        await cleanupAndroidViewport(cleanup.device, cleanup.serial).catch(() => undefined);
+        if (cleanup.startedByRunner) {
           await runAdb(cleanup.serial, ["emu", "kill"]).catch(() => undefined);
         }
       }
