@@ -17,6 +17,12 @@ describe("hasWideMarkdownBlock", () => {
     expect(hasWideMarkdownBlock("   ```\ncode\n```")).toBe(true);
   });
 
+  it("detects ordered-list markers with a simple heuristic", () => {
+    expect(hasWideMarkdownBlock("1. One\n2. Two\n3. Three\n4. Four\n5. Five")).toBe(true);
+    expect(hasWideMarkdownBlock("before\n3) Three")).toBe(true);
+    expect(hasWideMarkdownBlock("    1. indented code")).toBe(false);
+  });
+
   it("detects GFM tables", () => {
     expect(hasWideMarkdownBlock("| a | b |\n| --- | --- |\n| 1 | 2 |")).toBe(true);
     expect(hasWideMarkdownBlock("a | b\n:-- | --:\n1 | 2")).toBe(true);
