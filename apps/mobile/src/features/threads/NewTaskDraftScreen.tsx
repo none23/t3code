@@ -994,9 +994,8 @@ export function NewTaskDraftScreen(props: {
         <NativeStackScreenOptions options={{ headerShown: false }} />
         <AndroidScreenHeader title="New Thread" onBack={() => navigation.goBack()} />
 
-        <KeyboardStickyView enabled={isKeyboardVisible} className="flex-1">
-          <View className="flex-1" />
-
+        <View className="flex-1" />
+        <KeyboardStickyView enabled={isKeyboardVisible}>
           <View
             className="px-4 pt-2"
             style={{
