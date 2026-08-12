@@ -106,13 +106,13 @@ describe("parseCodexLine", () => {
         },
       },
     });
-  const threadSettings = (serviceTier: string) =>
+  const threadSettings = (serviceTier?: string) =>
     JSON.stringify({
       type: "event_msg",
       timestamp: "2026-08-01T05:17:43.694Z",
       payload: {
         type: "thread_settings_applied",
-        thread_settings: { service_tier: serviceTier },
+        thread_settings: serviceTier === undefined ? {} : { service_tier: serviceTier },
       },
     });
 
@@ -138,7 +138,7 @@ describe("parseCodexLine", () => {
     parseCodexLine(threadSettings("priority"), state);
     const fast = parseCodexLine(tokenCount(100, 0, 10, 0), state);
 
-    parseCodexLine(threadSettings("default"), state);
+    parseCodexLine(threadSettings(), state);
     const standard = parseCodexLine(tokenCount(200, 0, 20, 0), state);
 
     expect(fast?.speed).toBe("fast");

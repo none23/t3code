@@ -244,9 +244,7 @@ export function parseCodexLine(line: string, state: CodexScanState): UsageRecord
     const settings = payloadRecord["thread_settings"];
     if (typeof settings !== "object" || settings === null) return null;
     const serviceTier = (settings as Record<string, unknown>)["service_tier"];
-    if (typeof serviceTier === "string") {
-      state.speed = serviceTier === "priority" || serviceTier === "fast" ? "fast" : "standard";
-    }
+    state.speed = serviceTier === "priority" ? "fast" : "standard";
     return null;
   }
 
