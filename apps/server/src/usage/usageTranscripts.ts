@@ -8,11 +8,15 @@
  */
 import type { UsageProviderKind, UsageTokenTotals } from "@t3tools/contracts";
 
+export type UsageSpeed = "standard" | "fast";
+
 export interface UsageRecord {
   readonly provider: UsageProviderKind;
   readonly timestampMs: number;
   readonly model: string;
   readonly sessionId: string;
+  /** Effective speed reported by the provider for this response. */
+  readonly speed: UsageSpeed;
   readonly totals: UsageTokenTotals;
   readonly reportedCostUsd: number | null;
   /**
@@ -123,6 +127,7 @@ export function parseClaudeLine(line: string): UsageRecord | null {
     timestampMs,
     model,
     sessionId: typeof record["sessionId"] === "string" ? record["sessionId"] : "",
+    speed: usageRecord["speed"] === "fast" ? "fast" : "standard",
     totals: {
       uncachedInputTokens: int(usageRecord["input_tokens"]),
       cachedInputTokens: int(usageRecord["cache_read_input_tokens"]),
@@ -150,6 +155,7 @@ export function parseClaudeLine(line: string): UsageRecord | null {
 export interface CodexScanState {
   model: string;
   sessionId: string;
+  speed: UsageSpeed;
   lastUsageSignature: string | null;
   sawSessionMeta: boolean;
   /** While true, leading usage events are re-stamped copies of parent history. */
@@ -161,6 +167,7 @@ export function initialCodexScanState(): CodexScanState {
   return {
     model: "",
     sessionId: "",
+    speed: "standard",
     lastUsageSignature: null,
     sawSessionMeta: false,
     suppressingForkCopies: false,
@@ -233,6 +240,16 @@ export function parseCodexLine(line: string, state: CodexScanState): UsageRecord
     return null;
   }
 
+  if (payloadType === "thread_settings_applied") {
+    const settings = payloadRecord["thread_settings"];
+    if (typeof settings !== "object" || settings === null) return null;
+    const serviceTier = (settings as Record<string, unknown>)["service_tier"];
+    if (typeof serviceTier === "string") {
+      state.speed = serviceTier === "priority" || serviceTier === "fast" ? "fast" : "standard";
+    }
+    return null;
+  }
+
   if (payloadType !== "token_count") return null;
 
   const info = payloadRecord["info"];
@@ -288,6 +305,7 @@ export function parseCodexLine(line: string, state: CodexScanState): UsageRecord
     timestampMs,
     model: state.model,
     sessionId: state.sessionId,
+    speed: state.speed,
     totals,
     // Codex does not report cost in the rollout.
     reportedCostUsd: null,

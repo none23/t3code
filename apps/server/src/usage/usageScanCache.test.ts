@@ -15,6 +15,7 @@ function record(overrides: Partial<UsageRecord> = {}): UsageRecord {
     timestampMs: 1_786_000_000_000,
     model: "claude-fable-5",
     sessionId: "session-a",
+    speed: "standard",
     totals: {
       uncachedInputTokens: 2,
       cachedInputTokens: 1000,
@@ -40,7 +41,17 @@ describe("scan cache round trip", () => {
   it("restores records unchanged", () => {
     const original = cacheWith([
       ["/a.jsonl", 100, [record(), record({ dedupeKey: "msg_2:", model: "claude-opus-5" })]],
-      ["/b.jsonl", 200, [record({ sessionId: "session-b", reportedCostUsd: 1.5 })]],
+      [
+        "/b.jsonl",
+        200,
+        [
+          record({
+            sessionId: "session-b",
+            reportedCostUsd: 1.5,
+            speed: "fast",
+          }),
+        ],
+      ],
     ]);
 
     const restored = decodeScanCache(JSON.parse(JSON.stringify(encodeScanCache(original))));

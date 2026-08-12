@@ -9,19 +9,24 @@
  */
 import type { UsageCostSource, UsageTokenTotals } from "@t3tools/contracts";
 
+import type { UsageSpeed } from "./usageTranscripts.ts";
+
 /**
  * The subset of a LiteLLM entry we price against. All values are USD per token.
  *
- * LiteLLM also publishes tiered variants (`*_above_272k_tokens`, `*_flex`,
- * `*_priority`, `*_batches`). We deliberately price at the base tier: the
- * transcripts don't record which tier served a request, so anything else would
- * be a guess dressed up as precision.
+ * LiteLLM publishes priority rates alongside the base rates. They correspond
+ * to API Fast/Priority processing; provider-specific fast rates that LiteLLM
+ * does not carry are derived below from the provider's published multiplier.
  */
-export interface ModelRate {
+export interface TokenRate {
   readonly inputCostPerToken: number;
   readonly outputCostPerToken: number;
   readonly cacheReadCostPerToken: number;
   readonly cacheCreationCostPerToken: number;
+}
+
+export interface ModelRate extends TokenRate {
+  readonly fast?: TokenRate;
 }
 
 export type RateTable = ReadonlyMap<string, ModelRate>;
@@ -32,6 +37,10 @@ interface LiteLlmEntry {
   readonly output_cost_per_token?: unknown;
   readonly cache_read_input_token_cost?: unknown;
   readonly cache_creation_input_token_cost?: unknown;
+  readonly input_cost_per_token_priority?: unknown;
+  readonly output_cost_per_token_priority?: unknown;
+  readonly cache_read_input_token_cost_priority?: unknown;
+  readonly cache_creation_input_token_cost_priority?: unknown;
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -56,7 +65,7 @@ export function parseRateTable(document: unknown): RateTable {
     const output = finiteNumber(entry.output_cost_per_token);
     if (input === null || output === null) continue;
 
-    table.set(normalizeModelName(name), {
+    const standard: TokenRate = {
       inputCostPerToken: input,
       outputCostPerToken: output,
       // Anthropic bills cache reads at a discount and cache writes at a
@@ -64,9 +73,51 @@ export function parseRateTable(document: unknown): RateTable {
       // input rather than as free.
       cacheReadCostPerToken: finiteNumber(entry.cache_read_input_token_cost) ?? input,
       cacheCreationCostPerToken: finiteNumber(entry.cache_creation_input_token_cost) ?? input,
+    };
+    const normalizedName = normalizeModelName(name);
+    const priorityInput = finiteNumber(entry.input_cost_per_token_priority);
+    const priorityOutput = finiteNumber(entry.output_cost_per_token_priority);
+    const priorityRate =
+      priorityInput !== null && priorityOutput !== null
+        ? {
+            inputCostPerToken: priorityInput,
+            outputCostPerToken: priorityOutput,
+            cacheReadCostPerToken:
+              finiteNumber(entry.cache_read_input_token_cost_priority) ?? priorityInput,
+            cacheCreationCostPerToken:
+              finiteNumber(entry.cache_creation_input_token_cost_priority) ?? priorityInput,
+          }
+        : undefined;
+    const fastMultiplier = claudeFastMultiplier(normalizedName);
+    const fast =
+      priorityRate ?? (fastMultiplier === null ? undefined : scaleRate(standard, fastMultiplier));
+
+    table.set(normalizedName, {
+      ...standard,
+      ...(fast === undefined ? {} : { fast }),
     });
   }
   return table;
+}
+
+function scaleRate(rate: TokenRate, multiplier: number): TokenRate {
+  return {
+    inputCostPerToken: rate.inputCostPerToken * multiplier,
+    outputCostPerToken: rate.outputCostPerToken * multiplier,
+    cacheReadCostPerToken: rate.cacheReadCostPerToken * multiplier,
+    cacheCreationCostPerToken: rate.cacheCreationCostPerToken * multiplier,
+  };
+}
+
+/**
+ * Anthropic's Fast multiplier follows the model generation. Opus 4.6 and 4.7
+ * used the original $30/$150 rate; Opus 5 and 4.8 use $10/$50. Keeping the
+ * retired rates matters because the usage page scans historical transcripts.
+ */
+function claudeFastMultiplier(model: string): number | null {
+  if (/^claude-opus-(?:5|4-8)(?:-|$)/.test(model)) return 2;
+  if (/^claude-opus-4-[67](?:-|$)/.test(model)) return 6;
+  return null;
 }
 
 /**
@@ -98,10 +149,16 @@ const UNPRICEABLE_MODELS = new Set([
   "fable",
 ]);
 
-export function lookupRate(table: RateTable, model: string): ModelRate | null {
+export function lookupRate(
+  table: RateTable,
+  model: string,
+  speed: UsageSpeed = "standard",
+): TokenRate | null {
   const normalized = normalizeModelName(model);
   if (normalized.length === 0 || UNPRICEABLE_MODELS.has(normalized)) return null;
-  return table.get(normalized) ?? null;
+  const rate = table.get(normalized);
+  if (rate === undefined) return null;
+  return speed === "fast" ? (rate.fast ?? null) : rate;
 }
 
 export interface PricedUsage {
@@ -118,6 +175,7 @@ export interface PricedUsage {
 export function priceUsage(
   table: RateTable,
   model: string,
+  speed: UsageSpeed,
   totals: UsageTokenTotals,
   reportedCostUsd: number | null,
 ): PricedUsage {
@@ -125,7 +183,7 @@ export function priceUsage(
     return { costUsd: reportedCostUsd, costSource: "providerReported" };
   }
 
-  const rate = lookupRate(table, model);
+  const rate = lookupRate(table, model, speed);
   if (rate === null) return { costUsd: 0, costSource: "unpriced" };
 
   const costUsd =
@@ -141,8 +199,13 @@ export function priceUsage(
  * What the cached input would have cost at full input rates, minus what it
  * actually cost. Drives the "cache savings" figure.
  */
-export function cacheSavingsUsd(table: RateTable, model: string, totals: UsageTokenTotals): number {
-  const rate = lookupRate(table, model);
+export function cacheSavingsUsd(
+  table: RateTable,
+  model: string,
+  speed: UsageSpeed,
+  totals: UsageTokenTotals,
+): number {
+  const rate = lookupRate(table, model, speed);
   if (rate === null) return 0;
   return totals.cachedInputTokens * (rate.inputCostPerToken - rate.cacheReadCostPerToken);
 }

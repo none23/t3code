@@ -13,6 +13,7 @@ function claudeLine(overrides: {
   contentType: string;
   model?: string;
   outputTokens?: number;
+  speed?: "standard" | "fast";
 }): string {
   return JSON.stringify({
     type: "assistant",
@@ -29,6 +30,7 @@ function claudeLine(overrides: {
         cache_creation_input_tokens: 66818,
         cache_read_input_tokens: 1000,
         output_tokens: overrides.outputTokens ?? 286,
+        speed: overrides.speed ?? "standard",
       },
     },
   });
@@ -41,6 +43,7 @@ describe("parseClaudeLine", () => {
     expect(record).not.toBeNull();
     expect(record?.provider).toBe("claude");
     expect(record?.model).toBe("claude-fable-5");
+    expect(record?.speed).toBe("standard");
     expect(record?.totals).toEqual({
       uncachedInputTokens: 2,
       cachedInputTokens: 1000,
@@ -49,6 +52,14 @@ describe("parseClaudeLine", () => {
       reasoningTokens: 0,
     });
     expect(record?.dedupeKey).toBe("msg_1:");
+  });
+
+  it("maps Claude's reported speed to the effective service tier", () => {
+    const record = parseClaudeLine(
+      claudeLine({ messageId: "msg_fast", contentType: "text", speed: "fast" }),
+    );
+
+    expect(record?.speed).toBe("fast");
   });
 
   it("gives every content block of one message the same dedupe key", () => {
@@ -95,6 +106,15 @@ describe("parseCodexLine", () => {
         },
       },
     });
+  const threadSettings = (serviceTier: string) =>
+    JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-08-01T05:17:43.694Z",
+      payload: {
+        type: "thread_settings_applied",
+        thread_settings: { service_tier: serviceTier },
+      },
+    });
 
   it("attributes usage to the model from the preceding turn context", () => {
     const state = initialCodexScanState();
@@ -104,11 +124,25 @@ describe("parseCodexLine", () => {
 
     expect(record?.provider).toBe("codex");
     expect(record?.model).toBe("gpt-5.6-sol");
+    expect(record?.speed).toBe("standard");
     expect(record?.sessionId).toBe("019fbbc1-b12c-7360-a685-28c181f0025f");
     // Codex reports input_tokens inclusive of the cached portion.
     expect(record?.totals.uncachedInputTokens).toBe(19239 - 11008);
     expect(record?.totals.cachedInputTokens).toBe(11008);
     expect(record?.totals.reasoningTokens).toBe(116);
+  });
+
+  it("tracks applied fast mode changes across turns", () => {
+    const state = initialCodexScanState();
+    parseCodexLine(turnContext, state);
+    parseCodexLine(threadSettings("priority"), state);
+    const fast = parseCodexLine(tokenCount(100, 0, 10, 0), state);
+
+    parseCodexLine(threadSettings("default"), state);
+    const standard = parseCodexLine(tokenCount(200, 0, 20, 0), state);
+
+    expect(fast?.speed).toBe("fast");
+    expect(standard?.speed).toBe("standard");
   });
 
   it("skips a repeated token_count so deltas are not double counted", () => {

@@ -18,9 +18,9 @@ import type { UsageProviderKind } from "@t3tools/contracts";
 
 import type { UsageRecord } from "./usageTranscripts.ts";
 
-// v2: Codex fork-copy suppression changed what a file parses to, so v1
-// entries would keep serving double-counted records forever.
-export const USAGE_SCAN_CACHE_VERSION = 2 as const;
+// v3: records carry their effective speed so fast responses can be priced at
+// the provider's premium rate. Older entries must be reparsed to recover it.
+export const USAGE_SCAN_CACHE_VERSION = 3 as const;
 
 export interface CachedFile {
   readonly size: number;
@@ -47,6 +47,7 @@ type SerializedRecord = readonly [
   reasoningTokens: number,
   dedupeKey: string | null,
   reportedCostUsd: number | null,
+  isFast: boolean,
 ];
 
 interface SerializedFile {
@@ -96,6 +97,7 @@ export function encodeScanCache(cache: ScanCache): SerializedCache {
         record.totals.reasoningTokens,
         record.dedupeKey,
         record.reportedCostUsd,
+        record.speed === "fast",
       ]),
     };
   }
@@ -144,7 +146,7 @@ export function decodeScanCache(document: unknown): ScanCache {
     // file would never be re-parsed, silently losing the dropped rows' usage.
     let corrupt = false;
     for (const row of entry.r) {
-      if (!isRecordArray(row) || row.length < 10) {
+      if (!isRecordArray(row) || row.length < 11) {
         corrupt = true;
         break;
       }
@@ -159,6 +161,7 @@ export function decodeScanCache(document: unknown): ScanCache {
         reasoning,
         dedupeKey,
         reportedCostUsd,
+        isFast,
       ] = row as SerializedRecord;
 
       const model = typeof modelIndex === "number" ? models[modelIndex] : undefined;
@@ -170,7 +173,8 @@ export function decodeScanCache(document: unknown): ScanCache {
         !Number.isFinite(cached) ||
         !Number.isFinite(cacheCreation) ||
         !Number.isFinite(output) ||
-        !Number.isFinite(reasoning)
+        !Number.isFinite(reasoning) ||
+        typeof isFast !== "boolean"
       ) {
         corrupt = true;
         break;
@@ -181,6 +185,7 @@ export function decodeScanCache(document: unknown): ScanCache {
         timestampMs,
         model,
         sessionId: (typeof sessionIndex === "number" ? sessions[sessionIndex] : undefined) ?? "",
+        speed: isFast ? "fast" : "standard",
         totals: {
           uncachedInputTokens: uncached,
           cachedInputTokens: cached,
