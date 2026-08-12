@@ -43,7 +43,14 @@ describe("fast usage pricing", () => {
     ["claude-opus-5", 2],
     ["claude-opus-4-7", 6],
   ])("prices %s Fast usage at %sx its standard rate", (model, multiplier) => {
-    const rates = parseRateTable({ [model]: claudeRate });
+    const rates = parseRateTable({
+      [model]: {
+        ...claudeRate,
+        // Anthropic Priority and Claude Code Fast are different products.
+        input_cost_per_token_priority: 6e-6,
+        output_cost_per_token_priority: 3e-5,
+      },
+    });
     const standard = priceUsage(rates, model, "standard", totals, null);
     const fast = priceUsage(rates, model, "fast", totals, null);
 

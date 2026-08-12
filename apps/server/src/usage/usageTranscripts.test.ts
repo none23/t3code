@@ -135,10 +135,10 @@ describe("parseCodexLine", () => {
   it("tracks applied fast mode changes across turns", () => {
     const state = initialCodexScanState();
     parseCodexLine(turnContext, state);
-    parseCodexLine(threadSettings("priority"), state);
+    parseCodexLine(threadSettings("fast"), state);
     const fast = parseCodexLine(tokenCount(100, 0, 10, 0), state);
 
-    parseCodexLine(threadSettings(), state);
+    parseCodexLine(threadSettings("default"), state);
     const standard = parseCodexLine(tokenCount(200, 0, 20, 0), state);
 
     expect(fast?.speed).toBe("fast");

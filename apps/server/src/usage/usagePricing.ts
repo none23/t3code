@@ -89,8 +89,7 @@ export function parseRateTable(document: unknown): RateTable {
           }
         : undefined;
     const fastMultiplier = claudeFastMultiplier(normalizedName);
-    const fast =
-      priorityRate ?? (fastMultiplier === null ? undefined : scaleRate(standard, fastMultiplier));
+    const fast = fastMultiplier === null ? priorityRate : scaleRate(standard, fastMultiplier);
 
     table.set(normalizedName, {
       ...standard,
@@ -149,11 +148,7 @@ const UNPRICEABLE_MODELS = new Set([
   "fable",
 ]);
 
-export function lookupRate(
-  table: RateTable,
-  model: string,
-  speed: UsageSpeed = "standard",
-): TokenRate | null {
+export function lookupRate(table: RateTable, model: string, speed: UsageSpeed): TokenRate | null {
   const normalized = normalizeModelName(model);
   if (normalized.length === 0 || UNPRICEABLE_MODELS.has(normalized)) return null;
   const rate = table.get(normalized);

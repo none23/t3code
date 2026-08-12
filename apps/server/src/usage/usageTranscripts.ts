@@ -156,6 +156,7 @@ export interface CodexScanState {
   model: string;
   sessionId: string;
   speed: UsageSpeed;
+  hasAppliedServiceTier: boolean;
   lastUsageSignature: string | null;
   sawSessionMeta: boolean;
   /** While true, leading usage events are re-stamped copies of parent history. */
@@ -168,6 +169,7 @@ export function initialCodexScanState(): CodexScanState {
     model: "",
     sessionId: "",
     speed: "standard",
+    hasAppliedServiceTier: false,
     lastUsageSignature: null,
     sawSessionMeta: false,
     suppressingForkCopies: false,
@@ -244,7 +246,8 @@ export function parseCodexLine(line: string, state: CodexScanState): UsageRecord
     const settings = payloadRecord["thread_settings"];
     if (typeof settings !== "object" || settings === null) return null;
     const serviceTier = (settings as Record<string, unknown>)["service_tier"];
-    state.speed = serviceTier === "priority" ? "fast" : "standard";
+    state.speed = serviceTier === "priority" || serviceTier === "fast" ? "fast" : "standard";
+    state.hasAppliedServiceTier = true;
     return null;
   }
 

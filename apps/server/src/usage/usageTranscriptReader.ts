@@ -107,6 +107,7 @@ export async function readTranscriptRecords(
   provider: UsageProviderKind,
 ): Promise<readonly UsageRecord[] | null> {
   const records: UsageRecord[] = [];
+  const leadingCodexRecords: UsageRecord[] = [];
   const codexState = initialCodexScanState();
 
   try {
@@ -125,8 +126,20 @@ export async function readTranscriptRecords(
         ) {
           continue;
         }
+        const hadAppliedServiceTier = codexState.hasAppliedServiceTier;
         const record = parseCodexLine(line, codexState);
-        if (record !== null) records.push(record);
+        if (!hadAppliedServiceTier && codexState.hasAppliedServiceTier) {
+          records.push(
+            ...leadingCodexRecords.map((leading) => ({
+              ...leading,
+              speed: codexState.speed,
+            })),
+          );
+          leadingCodexRecords.length = 0;
+        }
+        if (record !== null) {
+          (codexState.hasAppliedServiceTier ? records : leadingCodexRecords).push(record);
+        }
         continue;
       }
 
@@ -138,5 +151,6 @@ export async function readTranscriptRecords(
     return null;
   }
 
+  records.push(...leadingCodexRecords);
   return records;
 }
