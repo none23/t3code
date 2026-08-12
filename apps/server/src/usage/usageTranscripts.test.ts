@@ -30,7 +30,7 @@ function claudeLine(overrides: {
         cache_creation_input_tokens: 66818,
         cache_read_input_tokens: 1000,
         output_tokens: overrides.outputTokens ?? 286,
-        speed: overrides.speed ?? "standard",
+        ...(overrides.speed === undefined ? {} : { speed: overrides.speed }),
       },
     },
   });
