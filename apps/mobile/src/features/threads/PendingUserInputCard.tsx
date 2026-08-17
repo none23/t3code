@@ -13,7 +13,6 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { USER_INPUT_TOGGLE_DURATION_MS } from "./pendingUserInputLayout";
-import { derivePendingUserInputOptionCopy } from "./pendingUserInputOption";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -261,15 +260,18 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
               <View className="gap-2">
                 {question.options.map((option) => {
                   const selected = isPendingUserInputOptionSelected(draft, option.label);
-                  const copy = derivePendingUserInputOptionCopy(option);
+                  const description =
+                    option.description !== option.label ? option.description : undefined;
                   return (
                     <Pressable
                       key={option.label}
-                      accessibilityLabel={copy.accessibilityLabel}
+                      accessibilityLabel={
+                        description ? `${option.label}. ${description}` : option.label
+                      }
                       accessibilityRole={question.multiSelect ? "checkbox" : "radio"}
                       accessibilityState={{ checked: selected }}
                       className={cn(
-                        "min-h-12 w-full flex-row items-center rounded-2xl border px-3.5 py-3 active:opacity-70",
+                        "min-h-12 w-full rounded-2xl border px-3.5 py-3",
                         selected
                           ? "border-blue-300/50 bg-blue-50 dark:border-blue-400/28 dark:bg-blue-400/14"
                           : "border-neutral-200 bg-white dark:border-white/6 dark:bg-neutral-950/70",
@@ -293,9 +295,9 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
                         >
                           {option.label}
                         </Text>
-                        {copy.description ? (
+                        {description ? (
                           <Text className="font-sans text-sm leading-5 text-neutral-500 dark:text-neutral-400">
-                            {copy.description}
+                            {description}
                           </Text>
                         ) : null}
                       </View>
