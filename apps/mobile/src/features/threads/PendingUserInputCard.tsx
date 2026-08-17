@@ -13,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { USER_INPUT_TOGGLE_DURATION_MS } from "./pendingUserInputLayout";
+import { derivePendingUserInputOptionCopy } from "./pendingUserInputOption";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -257,14 +258,18 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
               <Text className="font-sans text-base leading-snug text-neutral-950 dark:text-neutral-50">
                 {question.question}
               </Text>
-              <View className="flex-row flex-wrap gap-2.5">
+              <View className="gap-2">
                 {question.options.map((option) => {
                   const selected = isPendingUserInputOptionSelected(draft, option.label);
+                  const copy = derivePendingUserInputOptionCopy(option);
                   return (
                     <Pressable
                       key={option.label}
+                      accessibilityLabel={copy.accessibilityLabel}
+                      accessibilityRole={question.multiSelect ? "checkbox" : "radio"}
+                      accessibilityState={{ checked: selected }}
                       className={cn(
-                        "rounded-full border px-3 py-2.5 ",
+                        "min-h-12 w-full flex-row items-center rounded-2xl border px-3.5 py-3 active:opacity-70",
                         selected
                           ? "border-blue-300/50 bg-blue-50 dark:border-blue-400/28 dark:bg-blue-400/14"
                           : "border-neutral-200 bg-white dark:border-white/6 dark:bg-neutral-950/70",
@@ -277,16 +282,23 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
                         )
                       }
                     >
-                      <Text
-                        className={cn(
-                          "font-t3-bold text-sm",
-                          selected
-                            ? "text-sky-700 dark:text-sky-300"
-                            : "text-neutral-600 dark:text-neutral-300",
-                        )}
-                      >
-                        {option.label}
-                      </Text>
+                      <View className="min-w-0 flex-1 gap-0.5">
+                        <Text
+                          className={cn(
+                            "font-t3-bold text-sm",
+                            selected
+                              ? "text-sky-700 dark:text-sky-300"
+                              : "text-neutral-700 dark:text-neutral-200",
+                          )}
+                        >
+                          {option.label}
+                        </Text>
+                        {copy.description ? (
+                          <Text className="font-sans text-sm leading-5 text-neutral-500 dark:text-neutral-400">
+                            {copy.description}
+                          </Text>
+                        ) : null}
+                      </View>
                     </Pressable>
                   );
                 })}
