@@ -431,6 +431,44 @@ describe("buildThreadFeed", () => {
       expanded: false,
     });
 
+    const unfoldedAgentMessages = deriveThreadFeedPresentation(
+      feed,
+      thread.latestTurn,
+      new Set(),
+      new Set(),
+      null,
+      true,
+    );
+    expect(unfoldedAgentMessages.map((entry) => entry.id)).toEqual([
+      "assistant-commentary",
+      "turn-fold:turn-1",
+      "assistant-final",
+    ]);
+
+    const neutralWorkFeed = feed.map((entry) =>
+      entry.type === "activity-group"
+        ? {
+            ...entry,
+            activities: entry.activities.map((activity) => ({
+              ...activity,
+              status: "neutral" as const,
+            })),
+          }
+        : entry,
+    );
+    const rowsWithoutFoldableWork = deriveThreadFeedPresentation(
+      neutralWorkFeed,
+      thread.latestTurn,
+      new Set(),
+      new Set(),
+      null,
+      true,
+    );
+    expect(rowsWithoutFoldableWork.map((entry) => entry.id)).toEqual([
+      "assistant-commentary",
+      "assistant-final",
+    ]);
+
     const expanded = deriveThreadFeedPresentation(feed, thread.latestTurn, new Set([turnId]));
     expect(expanded.map((entry) => entry.id)).toEqual([
       "turn-fold:turn-1",

@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { useAtomValue } from "@effect/atom-react";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { type LegendListRef } from "@legendapp/list/react-native";
 import type { EnvironmentId, MessageId, ThreadId, TurnId } from "@t3tools/contracts";
@@ -44,6 +45,7 @@ import { TouchableOpacity } from "react-native-gesture-handler";
 import ImageViewing from "react-native-image-viewing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn, FadeInUp, type SharedValue } from "react-native-reanimated";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { useThemeColor } from "../../lib/useThemeColor";
 import { IOS_NAV_BAR_HEIGHT } from "../../lib/layoutMetrics";
 import { useFontFamily } from "../../lib/useFontFamily";
@@ -102,6 +104,7 @@ import {
 } from "./thread-work-log";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import { useAssetUrl } from "../../state/assets";
+import { mobilePreferencesAtom } from "../../state/preferences";
 import { resolveWorkspaceRelativeFilePath } from "../files/filePath";
 
 const WIDE_MARKDOWN_BLOCK_OPTIONS = {
@@ -1301,6 +1304,9 @@ function ThreadFeedPlaceholder(props: {
 
 export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const navigation = useNavigation();
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const showAllAgentMessages =
+    AsyncResult.isSuccess(preferences) && preferences.value.showAllAgentMessages === true;
   const copyFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const foldSettleFrameRef = useRef<number | null>(null);
   const foldSettleSecondFrameRef = useRef<number | null>(null);
@@ -1570,6 +1576,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         expandedTurnIds,
         expandedWorkGroupIds,
         props.activeWorkStartedAt,
+        showAllAgentMessages,
       ),
     [
       expandedTurnIds,
@@ -1577,6 +1584,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       props.activeWorkStartedAt,
       props.feed,
       props.latestTurn,
+      showAllAgentMessages,
     ],
   );
 

@@ -497,6 +497,9 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Auto-settle merged threads"]
         : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
+      ...(settings.showAllAgentMessages !== DEFAULT_UNIFIED_SETTINGS.showAllAgentMessages
+        ? ["Keep agent messages visible"]
+        : []),
       ...getChangedTypographySettingLabels(settings),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
         ? ["Diff whitespace changes"]
@@ -566,6 +569,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarAutoSettleOnMerge,
       settings.sidebarProjectGroupingMode,
       settings.sidebarThreadPreviewCount,
+      settings.showAllAgentMessages,
       settings.timestampFormat,
       settings.wordWrap,
       followSystem,
@@ -639,6 +643,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     updateSettings({
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
+      showAllAgentMessages: DEFAULT_UNIFIED_SETTINGS.showAllAgentMessages,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
@@ -2351,6 +2356,22 @@ export function GeneralSettingsPanel() {
                 }}
               />
             </div>
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Experimental">
+        <SettingsRow
+          {...searchableSetting("show-all-agent-messages")}
+          description="Keep every agent message outside collapsed work summaries. This can make some provider conversations noisier."
+          control={
+            <Switch
+              checked={settings.showAllAgentMessages}
+              onCheckedChange={(checked) =>
+                updateSettings({ showAllAgentMessages: Boolean(checked) })
+              }
+              aria-label="Keep agent messages visible"
+            />
           }
         />
       </SettingsSection>

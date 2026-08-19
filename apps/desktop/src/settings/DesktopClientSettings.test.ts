@@ -35,6 +35,7 @@ const clientSettings: ClientSettings = {
   fontSmoothing: true,
   glassOpacity: 80,
   planModeEnabled: false,
+  showAllAgentMessages: false,
   providerModelPreferences: {},
   sidebarAutoSettleAfterDays: 3,
   sidebarAutoSettleOnMerge: true,

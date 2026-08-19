@@ -104,6 +104,7 @@ import {
   type ParsedPreviewAnnotation,
 } from "~/lib/previewAnnotation";
 import { cn } from "~/lib/utils";
+import { useClientSettings } from "~/hooks/useSettings";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
@@ -282,6 +283,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   topFadeEnabled = false,
   loadEarlier = null,
 }: MessagesTimelineProps) {
+  const showAllAgentMessages = useClientSettings((settings) => settings.showAllAgentMessages);
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
   const [disclosureToggleSettling, setDisclosureToggleSettling] = useState(false);
@@ -402,6 +404,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         runningTurnId,
         expandedTurnIds,
         expandedWorkGroupIds,
+        showAllAgentMessages,
         isWorking,
         activeTurnStartedAt,
         turnDiffSummaryByAssistantMessageId,
@@ -413,6 +416,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       runningTurnId,
       expandedTurnIds,
       expandedWorkGroupIds,
+      showAllAgentMessages,
       isWorking,
       activeTurnStartedAt,
       turnDiffSummaryByAssistantMessageId,

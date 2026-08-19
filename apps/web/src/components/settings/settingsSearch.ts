@@ -173,6 +173,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "show-all-agent-messages",
+    title: "Keep agent messages visible",
+    to: "/settings/general",
+  },
+  {
     id: "legacy-plan-mode",
     title: "Plan mode (legacy)",
     to: "/settings/general",

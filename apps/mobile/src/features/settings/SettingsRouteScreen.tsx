@@ -127,6 +127,8 @@ function LocalSettingsRouteScreen() {
 
         <GeneralSettingsSection />
 
+        <ExperimentalSettingsSection />
+
         <SettingsSection title="Appearance">
           <SettingsRow icon="paintbrush" label="Appearance" target="SettingsAppearance" />
         </SettingsSection>
@@ -513,6 +515,8 @@ function ConfiguredSettingsRouteScreen() {
 
         <GeneralSettingsSection />
 
+        <ExperimentalSettingsSection />
+
         <SettingsSection title="Appearance">
           <SettingsRow icon="paintbrush" label="Appearance" target="SettingsAppearance" />
         </SettingsSection>
@@ -544,6 +548,25 @@ function GeneralSettingsSection() {
         onValueChange={(value) => savePreferences({ autoSettleOnMerge: value })}
       />
       <SettingsRow icon="chart.bar.xaxis" label="Usage" target="SettingsUsage" />
+    </SettingsSection>
+  );
+}
+
+function ExperimentalSettingsSection() {
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const showAllAgentMessages =
+    AsyncResult.isSuccess(preferences) && preferences.value.showAllAgentMessages === true;
+
+  return (
+    <SettingsSection title="Experimental">
+      <SettingsSwitchRow
+        icon="text.bubble"
+        label="Keep Agent Messages Visible"
+        subtitle="Keeps every agent message outside collapsed work summaries. This can make some provider conversations noisier."
+        value={showAllAgentMessages}
+        onValueChange={(value) => savePreferences({ showAllAgentMessages: value })}
+      />
     </SettingsSection>
   );
 }

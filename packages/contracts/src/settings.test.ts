@@ -35,6 +35,15 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings agent messages", () => {
+  it("keeps the experimental unfolded presentation opt-in", () => {
+    expect(decodeClientSettings({}).showAllAgentMessages).toBe(false);
+    expect(decodeClientSettingsPatch({ showAllAgentMessages: true }).showAllAgentMessages).toBe(
+      true,
+    );
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

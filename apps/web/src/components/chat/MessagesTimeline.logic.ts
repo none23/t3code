@@ -324,6 +324,7 @@ function deriveTurnFolds(input: {
   terminalAssistantMessageIds: ReadonlySet<string>;
   latestTurn: TimelineLatestTurn | null;
   unsettledTurnId: TurnId | null;
+  showAllAgentMessages: boolean;
 }): ReadonlyMap<string, TurnFold> {
   interface TurnGroup {
     entries: Array<TimelineEntry>;
@@ -392,6 +393,20 @@ function deriveTurnFolds(input: {
       if (entry.id === group.terminalEntry?.id) {
         continue;
       }
+      if (
+        input.showAllAgentMessages &&
+        entry.kind === "message" &&
+        entry.message.role === "assistant"
+      ) {
+        continue;
+      }
+      if (
+        input.showAllAgentMessages &&
+        entry.kind === "work" &&
+        workEntryIndicatesToolNeutralStatus(entry.entry)
+      ) {
+        continue;
+      }
       // Agent-spawn CTA rows never fold: workflows outlive their launching
       // turn (dynamic spawns, background execution), and folding the CTA
       // when the turn settles makes a still-running fleet invisible.
@@ -405,8 +420,9 @@ function deriveTurnFolds(input: {
     }
 
     const firstEntry = group.entries[0];
+    const anchorEntry = group.entries.find((entry) => hiddenEntryIds.has(entry.id));
     const lastEntry = group.entries.at(-1);
-    if (!firstEntry || !lastEntry) {
+    if (!firstEntry || !anchorEntry || !lastEntry) {
       continue;
     }
 
@@ -435,10 +451,10 @@ function deriveTurnFolds(input: {
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorEntryId.set(firstEntry.id, {
+    foldsByAnchorEntryId.set(anchorEntry.id, {
       turnId,
-      anchorEntryId: firstEntry.id,
-      createdAt: firstEntry.createdAt,
+      anchorEntryId: anchorEntry.id,
+      createdAt: anchorEntry.createdAt,
       hiddenEntryIds,
       label,
     });
@@ -452,25 +468,36 @@ export function deriveMessagesTimelineRows(input: {
   runningTurnId?: TurnId | null;
   expandedTurnIds?: ReadonlySet<TurnId>;
   expandedWorkGroupIds?: ReadonlySet<string>;
+  showAllAgentMessages?: boolean;
   isWorking: boolean;
   activeTurnStartedAt: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
+  const timelineEntries = input.showAllAgentMessages
+    ? input.timelineEntries.filter(
+        (entry) =>
+          entry.kind !== "message" ||
+          entry.message.role !== "assistant" ||
+          entry.message.text.trim().length > 0 ||
+          (entry.message.attachments?.length ?? 0) > 0,
+      )
+    : input.timelineEntries;
   const durationStartByMessageId = computeMessageDurationStart(
-    input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
+    timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
-  const terminalAssistantMessageIds = deriveTerminalAssistantMessageIds(input.timelineEntries);
+  const terminalAssistantMessageIds = deriveTerminalAssistantMessageIds(timelineEntries);
   const unsettledTurnId = deriveUnsettledTurnId(
     input.latestTurn ?? null,
     input.runningTurnId ?? null,
   );
   const foldsByAnchorEntryId = deriveTurnFolds({
-    timelineEntries: input.timelineEntries,
+    timelineEntries,
     terminalAssistantMessageIds,
     latestTurn: input.latestTurn ?? null,
     unsettledTurnId,
+    showAllAgentMessages: input.showAllAgentMessages ?? false,
   });
   const collapsedEntryIds = new Set<string>();
   for (const fold of foldsByAnchorEntryId.values()) {
@@ -481,8 +508,8 @@ export function deriveMessagesTimelineRows(input: {
     }
   }
 
-  for (let index = 0; index < input.timelineEntries.length; index += 1) {
-    const timelineEntry = input.timelineEntries[index];
+  for (let index = 0; index < timelineEntries.length; index += 1) {
+    const timelineEntry = timelineEntries[index];
     if (!timelineEntry) {
       continue;
     }
@@ -506,8 +533,8 @@ export function deriveMessagesTimelineRows(input: {
     if (timelineEntry.kind === "work") {
       const groupedEntries = [timelineEntry.entry];
       let cursor = index + 1;
-      while (cursor < input.timelineEntries.length) {
-        const nextEntry = input.timelineEntries[cursor];
+      while (cursor < timelineEntries.length) {
+        const nextEntry = timelineEntries[cursor];
         if (
           !nextEntry ||
           nextEntry.kind !== "work" ||

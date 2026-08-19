@@ -483,6 +483,20 @@ describe("deriveMessagesTimelineRows", () => {
         },
       },
       {
+        id: "assistant-empty-entry",
+        kind: "message" as const,
+        createdAt: "2026-01-01T00:00:07Z",
+        message: {
+          id: "assistant-empty" as never,
+          role: "assistant" as const,
+          text: "",
+          turnId: "turn-1" as never,
+          createdAt: "2026-01-01T00:00:07Z",
+          updatedAt: "2026-01-01T00:00:07Z",
+          streaming: false,
+        },
+      },
+      {
         id: "work-entry-1",
         kind: "work" as const,
         createdAt: "2026-01-01T00:00:08Z",
@@ -532,6 +546,41 @@ describe("deriveMessagesTimelineRows", () => {
       "assistant-final-entry",
     ]);
 
+    const unfoldedAgentRows = deriveMessagesTimelineRows({
+      timelineEntries,
+      showAllAgentMessages: true,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(unfoldedAgentRows.map((row) => row.id)).toEqual([
+      "user-entry",
+      "assistant-thought-entry",
+      "turn-fold:turn-1",
+      "assistant-final-entry",
+    ]);
+
+    const neutralWorkEntries = timelineEntries.map((entry) =>
+      entry.kind === "work"
+        ? { ...entry, entry: { ...entry.entry, tone: "thinking" as const } }
+        : entry,
+    );
+    const rowsWithoutFoldableWork = deriveMessagesTimelineRows({
+      timelineEntries: neutralWorkEntries,
+      showAllAgentMessages: true,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+    expect(rowsWithoutFoldableWork.map((row) => row.id)).toEqual([
+      "user-entry",
+      "assistant-thought-entry",
+      "assistant-final-entry",
+    ]);
+
     const expandedRows = deriveMessagesTimelineRows({
       timelineEntries,
       expandedTurnIds: new Set(["turn-1" as never]),
@@ -545,6 +594,7 @@ describe("deriveMessagesTimelineRows", () => {
       "user-entry",
       "turn-fold:turn-1",
       "assistant-thought-entry",
+      "assistant-empty-entry",
       "work-entry-1",
       "assistant-final-entry",
     ]);

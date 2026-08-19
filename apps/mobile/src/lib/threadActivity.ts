@@ -1140,9 +1140,14 @@ interface ThreadFeedTurnFold {
   readonly label: string;
 }
 
+function threadFeedActivityIsVisible(activity: ThreadFeedActivity): boolean {
+  return !(activity.toolLike && activity.status === "neutral");
+}
+
 function deriveThreadFeedTurnFolds(
   feed: ReadonlyArray<ThreadFeedEntry>,
   latestTurn: ThreadFeedLatestTurn | null,
+  showAllAgentMessages: boolean,
 ): ReadonlyMap<string, ThreadFeedTurnFold> {
   const terminalAssistantMessageIdByTurn = new Map<TurnId, string>();
   for (const entry of feed) {
@@ -1195,16 +1200,27 @@ function deriveThreadFeedTurnFolds(
     }
 
     const terminalAssistantMessageId = terminalAssistantMessageIdByTurn.get(turnId);
-    const hiddenEntryIds = new Set(
-      entries.filter((entry) => entry.id !== terminalAssistantMessageId).map((entry) => entry.id),
-    );
+    const hiddenEntryIds = new Set<string>();
+    for (const entry of entries) {
+      if (entry.id === terminalAssistantMessageId) continue;
+      if (showAllAgentMessages && entry.type === "message") continue;
+      if (
+        showAllAgentMessages &&
+        entry.type === "activity-group" &&
+        !entry.activities.some(threadFeedActivityIsVisible)
+      ) {
+        continue;
+      }
+      hiddenEntryIds.add(entry.id);
+    }
     if (hiddenEntryIds.size === 0) {
       continue;
     }
 
     const firstEntry = entries[0];
+    const anchorEntry = entries.find((entry) => hiddenEntryIds.has(entry.id));
     const lastEntry = entries.at(-1);
-    if (!firstEntry || !lastEntry) {
+    if (!firstEntry || !anchorEntry || !lastEntry) {
       continue;
     }
     const terminalEntry = terminalAssistantMessageId
@@ -1233,9 +1249,9 @@ function deriveThreadFeedTurnFolds(
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorId.set(firstEntry.id, {
+    foldsByAnchorId.set(anchorEntry.id, {
       turnId,
-      createdAt: firstEntry.createdAt,
+      createdAt: anchorEntry.createdAt,
       hiddenEntryIds,
       label,
     });
@@ -1249,12 +1265,13 @@ export function deriveThreadFeedPresentation(
   expandedTurnIds: ReadonlySet<TurnId>,
   expandedWorkGroupIds: ReadonlySet<string> = new Set(),
   activeWorkStartedAt: string | null = null,
+  showAllAgentMessages = false,
 ): ThreadFeedEntry[] {
   const sourceFeed = feed.filter(
     (entry) =>
       entry.type !== "turn-fold" && entry.type !== "work-toggle" && entry.type !== "working",
   );
-  const foldsByAnchorId = deriveThreadFeedTurnFolds(sourceFeed, latestTurn);
+  const foldsByAnchorId = deriveThreadFeedTurnFolds(sourceFeed, latestTurn, showAllAgentMessages);
   const collapsedEntryIds = new Set<string>();
   for (const fold of foldsByAnchorId.values()) {
     if (!expandedTurnIds.has(fold.turnId)) {
@@ -1301,9 +1318,7 @@ function appendPresentedFeedEntry(
     return;
   }
 
-  const activities = entry.activities.filter(
-    (activity) => !(activity.toolLike && activity.status === "neutral"),
-  );
+  const activities = entry.activities.filter(threadFeedActivityIsVisible);
   if (activities.length === 0) {
     return;
   }
