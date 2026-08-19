@@ -480,7 +480,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
 
-  it("folds settled-turn commentary and work behind a Worked-for row", () => {
+  it("folds settled-turn work while keeping every assistant message visible", () => {
     const timelineEntries = [
       {
         id: "user-entry",
@@ -580,6 +580,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(foldRow?.label).toBe("Worked for 22s");
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
+      "assistant-thought-entry",
       "turn-fold:turn-1",
       "thread-created-entry",
       "assistant-final-entry",
@@ -596,8 +597,8 @@ describe("deriveMessagesTimelineRows", () => {
 
     expect(expandedRows.map((row) => row.id)).toEqual([
       "user-entry",
-      "turn-fold:turn-1",
       "assistant-thought-entry",
+      "turn-fold:turn-1",
       "work-entry-1",
       "thread-created-entry",
       "assistant-final-entry",
@@ -612,7 +613,7 @@ describe("deriveMessagesTimelineRows", () => {
     ]);
   });
 
-  it("keeps persistent cards after the Worked-for row when they arrive before commentary", () => {
+  it("keeps persistent cards and assistant messages visible", () => {
     const timelineEntries = [
       {
         id: "user-entry",
@@ -679,8 +680,8 @@ describe("deriveMessagesTimelineRows", () => {
 
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
-      "turn-fold:turn-1",
       "subagent-card-entry",
+      "assistant-commentary-entry",
       "assistant-final-entry",
     ]);
   });

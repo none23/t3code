@@ -540,7 +540,7 @@ function deriveThreadFeedRunFolds(
       group.entries
         .filter(
           (entry) =>
-            entry.id !== terminalAssistantId &&
+            !(entry.type === "message" && entry.message.role === "assistant") &&
             !(
               entry.type === "activity-group" &&
               entry.activities.some((activity) => activity.prominent)
@@ -549,8 +549,9 @@ function deriveThreadFeedRunFolds(
         .map((entry) => entry.id),
     );
     const firstEntry = group.entries[0];
+    const anchorEntry = group.entries.find((entry) => hiddenEntryIds.has(entry.id));
     const lastEntry = group.entries.at(-1);
-    if (hiddenEntryIds.size === 0 || !firstEntry || !lastEntry) continue;
+    if (hiddenEntryIds.size === 0 || !firstEntry || !anchorEntry || !lastEntry) continue;
     const terminalEntry = terminalAssistantId
       ? group.entries.find((entry) => entry.id === terminalAssistantId)
       : null;
@@ -570,9 +571,9 @@ function deriveThreadFeedRunFolds(
     const duration = elapsedMs === null ? null : formatDuration(elapsedMs);
     const interrupted =
       latestRunMatches && (latestRun.status === "interrupted" || latestRun.status === "cancelled");
-    foldsByAnchorId.set(firstEntry.id, {
+    foldsByAnchorId.set(anchorEntry.id, {
       runId,
-      createdAt: firstEntry.createdAt,
+      createdAt: anchorEntry.createdAt,
       hiddenEntryIds,
       label: interrupted
         ? duration

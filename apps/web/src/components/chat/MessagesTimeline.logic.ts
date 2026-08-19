@@ -391,9 +391,9 @@ function timelineEntryFoldRunId(entry: TimelineEntry): RunId | null {
 }
 
 /**
- * Settled turns fold their commentary and tool activity behind a
- * "Worked for ..." row anchored at the turn's first foldable entry; the
- * terminal assistant message stays visible below the fold.
+ * Settled turns fold their tool activity behind a "Worked for ..." row.
+ * Assistant messages stay visible because providers may split one response
+ * across multiple messages in the same turn.
  */
 function deriveTurnFolds(input: {
   timelineEntries: ReadonlyArray<TimelineEntry>;
@@ -472,7 +472,10 @@ function deriveTurnFolds(input: {
     }
     const hiddenEntryIds = new Set<string>();
     for (const entry of group.entries) {
-      if (entry.id !== group.terminalEntry?.id && !timelineEntryIsPersistentResourceCard(entry)) {
+      if (
+        !(entry.kind === "message" && entry.message.role === "assistant") &&
+        !timelineEntryIsPersistentResourceCard(entry)
+      ) {
         hiddenEntryIds.add(entry.id);
       }
     }
@@ -481,8 +484,9 @@ function deriveTurnFolds(input: {
     }
 
     const firstEntry = group.entries[0];
+    const anchorEntry = group.entries.find((entry) => hiddenEntryIds.has(entry.id));
     const lastEntry = group.entries.at(-1);
-    if (!firstEntry || !lastEntry) {
+    if (!firstEntry || !anchorEntry || !lastEntry) {
       continue;
     }
 
@@ -509,10 +513,10 @@ function deriveTurnFolds(input: {
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorEntryId.set(firstEntry.id, {
+    foldsByAnchorEntryId.set(anchorEntry.id, {
       runId,
-      anchorEntryId: firstEntry.id,
-      createdAt: firstEntry.createdAt,
+      anchorEntryId: anchorEntry.id,
+      createdAt: anchorEntry.createdAt,
       hiddenEntryIds,
       label,
     });

@@ -343,11 +343,19 @@ describe("buildThreadFeed", () => {
     ).toBe(false);
   });
 
-  it("folds settled V2 run work while keeping the terminal assistant message visible", () => {
+  it("folds settled V2 run work while keeping every assistant message visible", () => {
+    const firstAssistantMessage = {
+      ...assistantMessage("2026-06-20T00:00:01.500Z"),
+      id: TurnItemId.make("item-assistant-first"),
+      messageId: MessageId.make("message-assistant-first"),
+      ordinal: 1,
+      text: "Synthetic deployment checklist",
+    };
     const feed = buildThreadFeed([
       projected(userMessage(), 0),
-      projected(command(), 1),
-      projected(assistantMessage(), 2),
+      projected(firstAssistantMessage, 1),
+      projected({ ...command(), ordinal: 2 }, 2),
+      projected({ ...assistantMessage(), ordinal: 3 }, 3),
     ]);
     const latestRun = {
       runId,
@@ -357,10 +365,16 @@ describe("buildThreadFeed", () => {
     };
 
     const collapsed = deriveThreadFeedPresentation(feed, latestRun, new Set());
-    expect(collapsed.map((entry) => entry.type)).toEqual(["message", "run-fold", "message"]);
+    expect(collapsed.map((entry) => entry.type)).toEqual([
+      "message",
+      "message",
+      "run-fold",
+      "message",
+    ]);
 
     const expanded = deriveThreadFeedPresentation(feed, latestRun, new Set([runId]));
     expect(expanded.map((entry) => entry.type)).toEqual([
+      "message",
       "message",
       "run-fold",
       "activity-group",
