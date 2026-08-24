@@ -134,6 +134,8 @@ interface ChatMarkdownProps {
   lineBreaks?: boolean;
   /** Parse sanitized raw HTML instead of displaying its source text. */
   parseRawHtml?: boolean;
+  /** Markdown extensions owned by a specialized renderer such as pull request Markdown. */
+  additionalRemarkPlugins?: NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 }
 
 const EMPTY_MARKDOWN_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
@@ -1471,6 +1473,7 @@ function ChatMarkdown({
   className,
   lineBreaks = false,
   parseRawHtml = true,
+  additionalRemarkPlugins,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -1497,6 +1500,12 @@ function ChatMarkdown({
     serverConfig?.availableEditors ?? [],
   );
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const markdownRemarkPlugins = useMemo<NonNullable<ReactMarkdownOptions["remarkPlugins"]>>(() => {
+    const plugins = lineBreaks
+      ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS
+      : CHAT_MARKDOWN_REMARK_PLUGINS;
+    return additionalRemarkPlugins?.length ? [...plugins, ...additionalRemarkPlugins] : plugins;
+  }, [additionalRemarkPlugins, lineBreaks]);
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
       string,
@@ -2017,9 +2026,7 @@ function ChatMarkdown({
       onCopy={handleCopy}
     >
       <ReactMarkdown
-        remarkPlugins={
-          lineBreaks ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : CHAT_MARKDOWN_REMARK_PLUGINS
-        }
+        remarkPlugins={markdownRemarkPlugins}
         rehypePlugins={parseRawHtml ? CHAT_MARKDOWN_REHYPE_PLUGINS : undefined}
         skipHtml={false}
         components={markdownComponents}

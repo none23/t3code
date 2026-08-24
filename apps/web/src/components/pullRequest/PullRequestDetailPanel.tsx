@@ -98,6 +98,7 @@ import type { PullRequestAgentSelectionInput } from "./PullRequestCodeTab";
 import { openOnHostLabel, showPullRequestLinkContextMenu } from "./pullRequestLinkContextMenu";
 import { PullRequestSummaryTab } from "./PullRequestSummaryTab";
 import { PullRequestTimelineTab } from "./PullRequestTimelineTab";
+import { PullRequestMarkdownRepositoryProvider } from "./PullRequestMarkdown";
 import {
   buildAddSelectionToAgentHandoff,
   buildAskAboutPullRequestHandoff,
@@ -1908,7 +1909,9 @@ export function PullRequestDetailPanel({
         {detailQuery.error && !detail ? (
           <PullRequestsUnavailableState error={detailQuery.error} onRetry={refreshDetail} />
         ) : detail ? (
-          <>
+          <PullRequestMarkdownRepositoryProvider
+            repositoryUrl={detail.provider === "github" ? repositoryUrl : null}
+          >
             {mountedTabs.has("summary") ? (
               <div className={cn("absolute inset-0", tab !== "summary" && "invisible")}>
                 <PullRequestSummaryTab
@@ -1965,7 +1968,7 @@ export function PullRequestDetailPanel({
                 </Suspense>
               </div>
             ) : null}
-          </>
+          </PullRequestMarkdownRepositoryProvider>
         ) : null}
       </div>
 

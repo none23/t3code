@@ -12,6 +12,14 @@ import {
 import { ProjectId } from "@t3tools/contracts";
 
 describe("changeRequestRepositoryUrl", () => {
+  it("derives a GitHub repository from a pull request URL", () => {
+    expect(
+      changeRequestRepositoryUrl(
+        "https://github.com/pingdotgg/t3code/pull/7866/files?diff=split#discussion",
+      ),
+    ).toBe("https://github.com/pingdotgg/t3code");
+  });
+
   it("preserves repository path casing", () => {
     expect(
       changeRequestRepositoryUrl(
