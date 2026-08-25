@@ -551,63 +551,73 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
   );
   useRegisterWorkspaceInspector(fileInspector.supported ? renderWorkspaceInspector : undefined);
 
+  const fileMenuActions = useMemo(
+    () =>
+      [
+        relativePath !== null && canPreview && !isImageFile
+          ? ({
+              id: "preview",
+              title: "Preview",
+              icon: "eye",
+              inline: true,
+              onPress: () => setModeOverride({ path: relativePath, mode: "preview" }),
+            } as const)
+          : null,
+        relativePath !== null && canPreview && !isImageFile
+          ? ({
+              id: "source",
+              title: "Source",
+              icon: "doc.text",
+              inline: true,
+              onPress: () => setModeOverride({ path: relativePath, mode: "source" }),
+            } as const)
+          : null,
+        relativePath !== null
+          ? ({
+              id: "copy-path",
+              title: "Copy path",
+              icon: "doc.on.doc",
+              inline: false,
+              onPress: () => copyTextWithHaptic(relativePath),
+            } as const)
+          : null,
+        relativePath !== null && isBrowserFile && typeof assetPreviewUri === "string"
+          ? ({
+              id: "open-browser",
+              title: Platform.OS === "ios" ? "Open in Safari" : "Open in browser",
+              icon: "safari",
+              inline: false,
+              onPress: () => tryOpenExternalUrl(assetPreviewUri, "file-preview"),
+            } as const)
+          : null,
+        relativePath !== null && resolvedActiveMode === "preview" && (isBrowserFile || isImageFile)
+          ? ({
+              id: "refresh",
+              title: "Refresh",
+              icon: "arrow.clockwise",
+              inline: false,
+              onPress: () => setPreviewRevision((current) => current + 1),
+            } as const)
+          : null,
+      ].filter((action) => action !== null),
+    [assetPreviewUri, canPreview, isBrowserFile, isImageFile, relativePath, resolvedActiveMode],
+  );
   const androidFileMenuActions = useMemo<MenuAction[]>(
     () =>
-      relativePath === null
-        ? []
-        : [
-            ...(canPreview && !isImageFile
-              ? [
-                  {
-                    id: "preview",
-                    title: "Preview",
-                    image: "eye",
-                    state: resolvedActiveMode === "preview" ? ("on" as const) : undefined,
-                  },
-                  {
-                    id: "source",
-                    title: "Source",
-                    image: "doc.text",
-                    state: resolvedActiveMode === "source" ? ("on" as const) : undefined,
-                  },
-                ]
-              : []),
-            { id: "copy-path", title: "Copy path", image: "doc.on.doc" },
-            ...(isBrowserFile && typeof assetPreviewUri === "string"
-              ? [{ id: "open-browser", title: "Open in browser", image: "safari" }]
-              : []),
-            ...(resolvedActiveMode === "preview" && (isBrowserFile || isImageFile)
-              ? [{ id: "refresh", title: "Refresh", image: "arrow.clockwise" }]
-              : []),
-          ],
-    [assetPreviewUri, canPreview, isBrowserFile, isImageFile, relativePath, resolvedActiveMode],
+      fileMenuActions.map((action) => ({
+        id: action.id,
+        title: action.title,
+        image: action.icon,
+        state: action.id === resolvedActiveMode ? "on" : undefined,
+      })),
+    [fileMenuActions, resolvedActiveMode],
   );
   const handleAndroidFileMenuAction = useCallback(
     (event: { nativeEvent: { event: string } }) => {
-      if (relativePath === null) {
-        return;
-      }
-      switch (event.nativeEvent.event) {
-        case "preview":
-          setModeOverride({ path: relativePath, mode: "preview" });
-          break;
-        case "source":
-          setModeOverride({ path: relativePath, mode: "source" });
-          break;
-        case "copy-path":
-          void copyTextWithHaptic(relativePath);
-          break;
-        case "open-browser":
-          if (typeof assetPreviewUri === "string") {
-            void tryOpenExternalUrl(assetPreviewUri, "file-preview");
-          }
-          break;
-        case "refresh":
-          setPreviewRevision((current) => current + 1);
-          break;
-      }
+      const action = fileMenuActions.find(({ id }) => id === event.nativeEvent.event);
+      void action?.onPress();
     },
-    [assetPreviewUri, relativePath],
+    [fileMenuActions],
   );
 
   if (selectedThread === null || environmentId === null || threadId === null) {
@@ -702,50 +712,33 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
             />
           ) : null}
           <NativeHeaderToolbar.Menu accessibilityLabel="File actions" icon="ellipsis">
-            {canPreview && !isImageFile ? (
+            {fileMenuActions.some(({ inline }) => inline) ? (
               <NativeHeaderToolbar.Menu inline>
-                <NativeHeaderToolbar.MenuAction
-                  icon="eye"
-                  isOn={resolvedActiveMode === "preview"}
-                  onPress={() => setModeOverride({ path: relativePath, mode: "preview" })}
-                >
-                  Preview
-                </NativeHeaderToolbar.MenuAction>
-                <NativeHeaderToolbar.MenuAction
-                  icon="doc.text"
-                  isOn={resolvedActiveMode === "source"}
-                  onPress={() => setModeOverride({ path: relativePath, mode: "source" })}
-                >
-                  Source
-                </NativeHeaderToolbar.MenuAction>
+                {fileMenuActions
+                  .filter(({ inline }) => inline)
+                  .map((action) => (
+                    <NativeHeaderToolbar.MenuAction
+                      key={action.id}
+                      icon={action.icon}
+                      isOn={action.id === resolvedActiveMode}
+                      onPress={action.onPress}
+                    >
+                      {action.title}
+                    </NativeHeaderToolbar.MenuAction>
+                  ))}
               </NativeHeaderToolbar.Menu>
             ) : null}
-            <NativeHeaderToolbar.MenuAction
-              icon="doc.on.doc"
-              onPress={() => copyTextWithHaptic(relativePath)}
-            >
-              Copy path
-            </NativeHeaderToolbar.MenuAction>
-            {isBrowserFile && typeof assetPreviewUri === "string" ? (
-              <NativeHeaderToolbar.MenuAction
-                icon="safari"
-                onPress={() => {
-                  void tryOpenExternalUrl(assetPreviewUri, "file-preview");
-                }}
-              >
-                Open in Safari
-              </NativeHeaderToolbar.MenuAction>
-            ) : null}
-            {resolvedActiveMode === "preview" && (isBrowserFile || isImageFile) ? (
-              <NativeHeaderToolbar.MenuAction
-                icon="arrow.clockwise"
-                onPress={() => {
-                  setPreviewRevision((current) => current + 1);
-                }}
-              >
-                Refresh
-              </NativeHeaderToolbar.MenuAction>
-            ) : null}
+            {fileMenuActions
+              .filter(({ inline }) => !inline)
+              .map((action) => (
+                <NativeHeaderToolbar.MenuAction
+                  key={action.id}
+                  icon={action.icon}
+                  onPress={action.onPress}
+                >
+                  {action.title}
+                </NativeHeaderToolbar.MenuAction>
+              ))}
           </NativeHeaderToolbar.Menu>
         </NativeHeaderToolbar>
         <FileContent
