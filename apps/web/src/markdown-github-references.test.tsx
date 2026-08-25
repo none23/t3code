@@ -43,6 +43,13 @@ describe("rehypeGithubReferences", () => {
       `See [Issue #123](${REPOSITORY_URL}/issues/123)`,
     ],
     ["a reference beside raw HTML", "<s>should be fixed separately</s> - Fixed in #123"],
+    ["a reference in emphasis", "_#123_"],
+    ["a reference in strong emphasis", "**#123**"],
+    ["a reference in strikethrough", "~#123~"],
+    [
+      "a reference before escaped underscores",
+      String.raw`Fixes #123 with a \_literal\_ underscore`,
+    ],
     [
       "a reference after inline code in an over-indented list item",
       "-       `\\#123` padding text #123",
@@ -89,12 +96,35 @@ describe("rehypeGithubReferences", () => {
     expect(html).toContain(`${beforeLink}${link}`);
   });
 
+  it.each([
+    ["a Markdown escape", String.raw`Keep \#123 literal but link #456.`],
+    ["an HTML entity", "Use &amp; then link #456."],
+  ])("links references after %s in a single paragraph", (_case, markdown) => {
+    const html = renderMarkdown(markdown);
+
+    expect(html).toContain(`href="${REPOSITORY_URL}/issues/456"`);
+    expect(html).not.toContain(`${REPOSITORY_URL}/issues/123`);
+  });
+
+  it("links repeated references around HTML entities", () => {
+    const html = renderMarkdown("Fixes #123 &nbsp; ok, Fixes #123 (see &copy; 2024)");
+
+    expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/123`, "g")) ?? []).toHaveLength(2);
+  });
+
+  it("does not let an escaped identifier consume a later reference with the same number", () => {
+    const html = renderMarkdown(String.raw`word_\#5, but #5 works.`);
+
+    expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/5`, "g")) ?? []).toHaveLength(1);
+  });
+
   it("does not link a reference embedded in another identifier", () => {
-    const html = renderMarkdown("owner/repo#1 C#2 word#3, but (#4) works.");
+    const html = renderMarkdown("owner/repo#1 C#2 word#3 word_#5, but (#4) works.");
 
     expect(html).not.toContain(`${REPOSITORY_URL}/issues/1`);
     expect(html).not.toContain(`${REPOSITORY_URL}/issues/2`);
     expect(html).not.toContain(`${REPOSITORY_URL}/issues/3`);
+    expect(html).not.toContain(`${REPOSITORY_URL}/issues/5`);
     expect(html).toContain(`href="${REPOSITORY_URL}/issues/4"`);
   });
 

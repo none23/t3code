@@ -19,7 +19,7 @@ interface SourceReference {
 
 const GITHUB_ISSUE_REFERENCE_PATTERN = /(?<![\p{L}\p{N}_/])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
 const GITHUB_ISSUE_SOURCE_PATTERN =
-  /(^|[^\p{L}\p{N}_/\\&])(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}_])/gu;
+  /(^|[^\p{L}\p{N}/\\&])(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
 const GITHUB_REFERENCE_IGNORED_ELEMENT_PATTERN = /^(?:a|code|math|pre|script|style|svg|title)$/;
 
 export function githubReferenceUrl(repositoryUrl: string, number: string) {
@@ -31,11 +31,13 @@ function sourceReferences(source: string) {
   for (const match of source.matchAll(GITHUB_ISSUE_SOURCE_PATTERN)) {
     const number = match[3];
     if (number === undefined || match.index === undefined) continue;
+    const boundary = match[1] ?? "";
+    if (boundary.endsWith("_") && /[\p{L}\p{N}_]/u.test(source[match.index - 1] ?? "")) continue;
 
     references.push({
       number,
       escaped: (match[2]?.length ?? 0) % 2 === 1,
-      start: match.index + (match[1]?.length ?? 0),
+      start: match.index + boundary.length,
       end: match.index + match[0].length,
     });
   }
@@ -57,25 +59,13 @@ export function rehypeGithubReferences({ repositoryUrl }: { readonly repositoryU
 
     function claimSourceReference(
       number: string,
-      text: string,
       node: MarkdownHtmlAstNode,
       ancestors: readonly MarkdownHtmlAstNode[],
     ) {
       const stack = [...ancestors, node];
-      const nodeRange = sourceRange(node);
-      const nodeRangeMatchesText =
-        nodeRange !== undefined && source.slice(nodeRange.start, nodeRange.end).includes(text);
       for (let index = stack.length - 1; index >= 0; index -= 1) {
         const range = sourceRange(stack[index]!);
         if (!range || range.start < 0 || range.end > source.length) continue;
-        // Reparsed list items retain offsets from their temporary source. Ignore that range when
-        // it no longer contains the rendered value, then align against the original ancestor.
-        if (
-          !nodeRangeMatchesText &&
-          range.start === nodeRange?.start &&
-          range.end === nodeRange.end
-        )
-          continue;
 
         const parentRange = stack
           .slice(0, index)
@@ -114,7 +104,7 @@ export function rehypeGithubReferences({ repositoryUrl }: { readonly repositoryU
         const number = match[1];
         if (number === undefined || match.index === undefined) continue;
 
-        const reference = claimSourceReference(number, text, node, ancestors);
+        const reference = claimSourceReference(number, node, ancestors);
         if (!linkable || !reference || reference.escaped) continue;
 
         replacementNodes ??= [];

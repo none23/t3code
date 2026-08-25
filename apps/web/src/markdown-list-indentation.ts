@@ -91,6 +91,11 @@ function parseRecoveredMarkdown(value: string, parser: MarkdownParser): Recovere
   };
 }
 
+function withoutRecoveredPositions(node: MarkdownAstNode): MarkdownAstNode {
+  const { position: _position, children, ...rest } = node;
+  return children ? { ...rest, children: children.map(withoutRecoveredPositions) } : rest;
+}
+
 function blocksFromIndentedCode(node: MarkdownAstNode, parser: MarkdownParser): RecoveredMarkdown {
   const value = typeof node.value === "string" ? node.value.trim() : "";
   const recovered = parseRecoveredMarkdown(value, parser);
@@ -129,7 +134,11 @@ function attachListItemIndentationNormalizer(this: MarkdownParser) {
           for (const block of recovered.blocks) {
             visit(block, recovered.source);
           }
-          return recovered.blocks;
+          const blocks = recovered.blocks.map(withoutRecoveredPositions);
+          const first = blocks[0];
+          return first && child.position
+            ? [{ ...first, position: child.position }, ...blocks.slice(1)]
+            : blocks;
         }
         visit(child, source);
         return [child];
