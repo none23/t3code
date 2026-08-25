@@ -19,8 +19,9 @@ interface SourceReference {
 }
 
 const GITHUB_ISSUE_REFERENCE_PATTERN = /(?<![\p{L}\p{N}_/])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
+// Even backslash runs after identifiers leave an unescaped `#` in rendered Markdown.
 const GITHUB_ISSUE_SOURCE_PATTERN =
-  /(^|(?<![\p{L}\p{N}_])_+|[^\p{L}\p{N}_/\\&])(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
+  /(^|(?<![\p{L}\p{N}_])_+|[^\p{L}\p{N}_/\\&]|(?<=[\p{L}\p{N}_])(?=(?:\\\\)*#))(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
 const GITHUB_REFERENCE_IGNORED_ELEMENT_PATTERN = /^(?:a|code|math|pre|script|style|svg|title)$/;
 
 export function githubReferenceUrl(repositoryUrl: string, number: string) {
@@ -34,14 +35,18 @@ function sourceReferences(source: string) {
     if (number === undefined || match.index === undefined) continue;
     const boundary = match[1] ?? "";
     const end = match.index + match[0].length;
-    const closingUnderscores = /^_+/u.exec(source.slice(end))?.[0];
+    const closingUnderscoreCount = /^_+/u.exec(source.slice(end))?.[0].length ?? 0;
+    const openingUnderscoreCount = /^_+$/u.test(boundary) ? boundary.length : 0;
+    const underscoreSuffixLength = openingUnderscoreCount
+      ? Math.min(openingUnderscoreCount, closingUnderscoreCount)
+      : closingUnderscoreCount;
 
     references.push({
       number,
       escaped: (match[2]?.length ?? 0) % 2 === 1,
       start: match.index + boundary.length,
       end,
-      ...(closingUnderscores ? { underscoreSuffixEnd: end + closingUnderscores.length } : {}),
+      ...(underscoreSuffixLength > 0 ? { underscoreSuffixEnd: end + underscoreSuffixLength } : {}),
     });
   }
   return references;

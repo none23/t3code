@@ -47,6 +47,7 @@ describe("rehypeGithubReferences", () => {
     ["a reference in strong emphasis", "**#123**"],
     ["a reference in underscore-delimited strong emphasis", "__#123__"],
     ["a reference in nested underscore emphasis", "___#123___"],
+    ["a reference with an unmatched trailing underscore", "__#123___"],
     ["a reference at the end of emphasis", "_Fixes #123_"],
     ["a reference at the end of strong emphasis", "__Fixes #123__"],
     ["a reference in strikethrough", "~#123~"],
@@ -127,6 +128,12 @@ describe("rehypeGithubReferences", () => {
     const html = renderMarkdown(String.raw`word_\#5 and \#5_word, but #5 works.`);
 
     expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/5`, "g")) ?? []).toHaveLength(1);
+  });
+
+  it("links an unescaped reference after a literal backslash", () => {
+    const html = renderMarkdown(String.raw`text\\#5`);
+
+    expect(html).toContain(`text\\<a href="${REPOSITORY_URL}/issues/5">#5</a>`);
   });
 
   it("does not link a reference embedded in another identifier", () => {

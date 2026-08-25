@@ -1832,6 +1832,7 @@ function ChatMarkdown({
           const link = (
             <a
               {...props}
+              data-markdown-copy={isGithubReference ? plainText : undefined}
               href={href}
               target={isSameDocumentLink ? undefined : "_blank"}
               rel={isSameDocumentLink ? undefined : "noopener noreferrer"}
