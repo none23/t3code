@@ -49,7 +49,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
-import { remarkGithubReferences } from "../markdown-github-references";
+import { githubReferenceUrl, rehypeGithubReferences } from "../markdown-github-references";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
@@ -1501,15 +1501,25 @@ function ChatMarkdown({
     serverConfig?.availableEditors ?? [],
   );
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
-  const markdownRemarkPlugins = useMemo<NonNullable<ReactMarkdownOptions["remarkPlugins"]>>(() => {
-    const plugins = lineBreaks
-      ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS
-      : CHAT_MARKDOWN_REMARK_PLUGINS;
+  const markdownRemarkPlugins = lineBreaks
+    ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS
+    : CHAT_MARKDOWN_REMARK_PLUGINS;
+  const markdownRehypePlugins = useMemo<ReactMarkdownOptions["rehypePlugins"]>(() => {
+    if (!githubRepositoryUrl) return parseRawHtml ? CHAT_MARKDOWN_REHYPE_PLUGINS : undefined;
 
-    return githubRepositoryUrl
-      ? [...plugins, [remarkGithubReferences, { repositoryUrl: githubRepositoryUrl }]]
-      : plugins;
-  }, [githubRepositoryUrl, lineBreaks]);
+    const githubReferences: NonNullable<ReactMarkdownOptions["rehypePlugins"]>[number] = [
+      rehypeGithubReferences,
+      { repositoryUrl: githubRepositoryUrl },
+    ];
+    return parseRawHtml
+      ? [
+          rehypeRaw,
+          githubReferences,
+          rehypeNormalizeWindowsImageSrc,
+          [rehypeSanitize, CHAT_MARKDOWN_SANITIZE_SCHEMA],
+        ]
+      : [githubReferences];
+  }, [githubRepositoryUrl, parseRawHtml]);
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
       string,
@@ -1804,6 +1814,12 @@ function ChatMarkdown({
         );
       },
       a({ node, href, children, title: _title, ...props }) {
+        const plainText = plainHastText(node);
+        const isGithubReference =
+          githubRepositoryUrl !== undefined &&
+          plainText !== null &&
+          /^#[1-9]\d*$/.test(plainText) &&
+          href === githubReferenceUrl(githubRepositoryUrl, plainText.slice(1));
         const normalizedHref = href ? normalizeMarkdownLinkHrefKey(href) : "";
         const fileLinkMeta = normalizedHref
           ? (markdownFileLinkMetaByHref.get(normalizedHref) ??
@@ -1888,8 +1904,8 @@ function ChatMarkdown({
                 });
               }}
             >
-              {faviconHost && hastHasText(node) ? (
-                <MarkdownExternalLinkContent host={faviconHost} plainText={plainHastText(node)}>
+              {faviconHost && !isGithubReference && hastHasText(node) ? (
+                <MarkdownExternalLinkContent host={faviconHost} plainText={plainText}>
                   {children}
                 </MarkdownExternalLinkContent>
               ) : (
@@ -1897,7 +1913,7 @@ function ChatMarkdown({
               )}
             </a>
           );
-          if (!faviconHost || !href) {
+          if (isGithubReference || !faviconHost || !href) {
             return link;
           }
           return (
@@ -2000,6 +2016,7 @@ function ChatMarkdown({
     cwd,
     diffThemeName,
     fileLinkParentSuffixByPath,
+    githubRepositoryUrl,
     inlineCodeFileLinkMetaByText,
     isStreaming,
     markdownFileLinkMetaByHref,
@@ -2031,7 +2048,7 @@ function ChatMarkdown({
     >
       <ReactMarkdown
         remarkPlugins={markdownRemarkPlugins}
-        rehypePlugins={parseRawHtml ? CHAT_MARKDOWN_REHYPE_PLUGINS : undefined}
+        rehypePlugins={markdownRehypePlugins}
         skipHtml={false}
         components={markdownComponents}
         urlTransform={markdownUrlTransform}

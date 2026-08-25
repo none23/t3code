@@ -1,64 +1,88 @@
-interface MarkdownAstNode {
-  type?: string;
+import { defaultIgnore, findAndReplace, type RegExpMatchObject } from "hast-util-find-and-replace";
+
+interface MarkdownSourceFile {
   value?: unknown;
-  url?: string;
-  children?: MarkdownAstNode[];
 }
 
-export interface RemarkGithubReferencesOptions {
+interface SourceReference {
+  readonly number: string;
+  readonly escaped: boolean;
+}
+
+export interface RehypeGithubReferencesOptions {
   /** Repository root URL without a trailing slash. */
   readonly repositoryUrl: string;
 }
 
-const GITHUB_ISSUE_REFERENCE_PATTERN = /(^|[^\p{L}\p{N}_/])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
-const REFERENCE_CONTAINER_TYPES = new Set(["link", "linkReference"]);
+const GITHUB_ISSUE_REFERENCE_PATTERN = /(?<![\p{L}\p{N}_/])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
+const GITHUB_ISSUE_SOURCE_PATTERN =
+  /(^|[^\p{L}\p{N}_/\\])(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}_])/gu;
+const GITHUB_REFERENCE_IGNORED_ELEMENTS = [...defaultIgnore, "a", "code", "pre"];
+
+export function githubReferenceUrl(repositoryUrl: string, number: string): string {
+  return `${repositoryUrl}/issues/${number}`;
+}
+
+function referencesInSource(source: string, start: number, end: number): SourceReference[] {
+  return [...source.slice(start, end).matchAll(GITHUB_ISSUE_SOURCE_PATTERN)].flatMap((match) => {
+    const number = match[3];
+    return number === undefined ? [] : [{ number, escaped: (match[2]?.length ?? 0) % 2 === 1 }];
+  });
+}
+
+function alignedSourceReferences(match: RegExpMatchObject, source: string): SourceReference[] {
+  const numbers = [...match.input.matchAll(new RegExp(GITHUB_ISSUE_REFERENCE_PATTERN))].flatMap(
+    (reference) => (reference[1] === undefined ? [] : [reference[1]]),
+  );
+
+  for (let index = match.stack.length - 1; index >= 0; index -= 1) {
+    const position = match.stack[index]?.position;
+    const start = position?.start.offset;
+    const end = position?.end.offset;
+    if (start === undefined || end === undefined) continue;
+
+    const references = referencesInSource(source, start, end);
+    for (let offset = 0; offset <= references.length - numbers.length; offset += 1) {
+      const candidate = references.slice(offset, offset + numbers.length);
+      if (
+        candidate.every((reference, referenceIndex) => reference.number === numbers[referenceIndex])
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  return [];
+}
 
 /** Turns same-repository `#123` text into the link GitHub uses for an issue or pull request. */
-export function remarkGithubReferences({ repositoryUrl }: RemarkGithubReferencesOptions) {
-  const issueUrlPrefix = `${repositoryUrl}/issues/`;
+export function rehypeGithubReferences({ repositoryUrl }: RehypeGithubReferencesOptions) {
+  return (tree: Parameters<typeof findAndReplace>[0], file: MarkdownSourceFile) => {
+    const source = typeof file.value === "string" ? file.value : "";
+    const remainingReferences = new WeakMap<object, SourceReference[]>();
 
-  return (tree: MarkdownAstNode) => {
-    const visit = (node: MarkdownAstNode) => {
-      if (REFERENCE_CONTAINER_TYPES.has(node.type ?? "")) return;
+    findAndReplace(
+      tree,
+      [
+        GITHUB_ISSUE_REFERENCE_PATTERN,
+        (_value: string, number: string, match: RegExpMatchObject) => {
+          const textNode = match.stack.at(-1);
+          if (textNode === undefined) return false;
+          const references =
+            remainingReferences.get(textNode) ?? alignedSourceReferences(match, source);
+          remainingReferences.set(textNode, references);
+          const sourceReference = references.shift();
+          if (sourceReference?.number !== number || sourceReference.escaped) return false;
 
-      const children = node.children;
-      if (children === undefined) return;
-
-      const nextChildren: MarkdownAstNode[] = [];
-      for (const child of children) {
-        if (child.type !== "text" || typeof child.value !== "string") {
-          visit(child);
-          nextChildren.push(child);
-          continue;
-        }
-
-        let cursor = 0;
-        for (const match of child.value.matchAll(GITHUB_ISSUE_REFERENCE_PATTERN)) {
-          const boundary = match[1] ?? "";
-          const number = match[2];
-          if (number === undefined || match.index === undefined) continue;
-
-          const referenceStart = match.index + boundary.length;
-          if (referenceStart > cursor) {
-            nextChildren.push({ type: "text", value: child.value.slice(cursor, referenceStart) });
-          }
-          nextChildren.push({
-            type: "link",
-            url: `${issueUrlPrefix}${number}`,
+          return {
+            type: "element",
+            tagName: "a",
+            properties: { href: githubReferenceUrl(repositoryUrl, number) },
             children: [{ type: "text", value: `#${number}` }],
-          });
-          cursor = referenceStart + number.length + 1;
-        }
-
-        if (cursor === 0) {
-          nextChildren.push(child);
-        } else if (cursor < child.value.length) {
-          nextChildren.push({ type: "text", value: child.value.slice(cursor) });
-        }
-      }
-      node.children = nextChildren;
-    };
-
-    visit(tree);
+          };
+        },
+      ],
+      { ignore: GITHUB_REFERENCE_IGNORED_ELEMENTS },
+    );
   };
 }
