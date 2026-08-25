@@ -77,4 +77,13 @@ describe("rehypeGithubReferences", () => {
     expect(html).not.toContain(`${REPOSITORY_URL}/issues/789`);
     expect(html).toContain(`href="${REPOSITORY_URL}/issues/790"`);
   });
+
+  it("keeps escapes aligned in reparsed over-indented list items", () => {
+    const html = renderMarkdown(String.raw`#789 and #790
+
+-       \#789 and #790`);
+
+    expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/789`, "g")) ?? []).toHaveLength(1);
+    expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/790`, "g")) ?? []).toHaveLength(2);
+  });
 });

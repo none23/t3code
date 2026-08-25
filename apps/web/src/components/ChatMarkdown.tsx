@@ -258,10 +258,14 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkNormalizeLinksAndTagInlineCode,
 ] satisfies NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
 
-const CHAT_MARKDOWN_REHYPE_PLUGINS = [
-  rehypeRaw,
+const CHAT_MARKDOWN_REHYPE_PLUGINS_AFTER_RAW = [
   rehypeNormalizeWindowsImageSrc,
   [rehypeSanitize, CHAT_MARKDOWN_SANITIZE_SCHEMA],
+] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
+
+const CHAT_MARKDOWN_REHYPE_PLUGINS = [
+  rehypeRaw,
+  ...CHAT_MARKDOWN_REHYPE_PLUGINS_AFTER_RAW,
 ] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
 
 /** GitHub's own five alert kinds, in its colors: the glyph names the urgency, the title says it. */
@@ -1512,12 +1516,7 @@ function ChatMarkdown({
       { repositoryUrl: githubRepositoryUrl },
     ];
     return parseRawHtml
-      ? [
-          rehypeRaw,
-          githubReferences,
-          rehypeNormalizeWindowsImageSrc,
-          [rehypeSanitize, CHAT_MARKDOWN_SANITIZE_SCHEMA],
-        ]
+      ? [rehypeRaw, githubReferences, ...CHAT_MARKDOWN_REHYPE_PLUGINS_AFTER_RAW]
       : [githubReferences];
   }, [githubRepositoryUrl, parseRawHtml]);
   const markdownFileLinkMetaByHref = useMemo(() => {
