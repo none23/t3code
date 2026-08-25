@@ -45,6 +45,10 @@ describe("rehypeGithubReferences", () => {
     ["a reference beside raw HTML", "<s>should be fixed separately</s> - Fixed in #123"],
     ["a reference in emphasis", "_#123_"],
     ["a reference in strong emphasis", "**#123**"],
+    ["a reference in underscore-delimited strong emphasis", "__#123__"],
+    ["a reference in nested underscore emphasis", "___#123___"],
+    ["a reference at the end of emphasis", "_Fixes #123_"],
+    ["a reference at the end of strong emphasis", "__Fixes #123__"],
     ["a reference in strikethrough", "~#123~"],
     [
       "a reference before escaped underscores",
@@ -112,8 +116,15 @@ describe("rehypeGithubReferences", () => {
     expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/123`, "g")) ?? []).toHaveLength(2);
   });
 
+  it("links each reference across an emphasized span", () => {
+    const html = renderMarkdown("__#123 and #456__");
+
+    expect(html).toContain(`href="${REPOSITORY_URL}/issues/123"`);
+    expect(html).toContain(`href="${REPOSITORY_URL}/issues/456"`);
+  });
+
   it("does not let an escaped identifier consume a later reference with the same number", () => {
-    const html = renderMarkdown(String.raw`word_\#5, but #5 works.`);
+    const html = renderMarkdown(String.raw`word_\#5 and \#5_word, but #5 works.`);
 
     expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/5`, "g")) ?? []).toHaveLength(1);
   });

@@ -15,11 +15,12 @@ interface SourceReference {
   readonly escaped: boolean;
   readonly start: number;
   readonly end: number;
+  readonly underscoreSuffixEnd?: number;
 }
 
 const GITHUB_ISSUE_REFERENCE_PATTERN = /(?<![\p{L}\p{N}_/])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
 const GITHUB_ISSUE_SOURCE_PATTERN =
-  /(^|[^\p{L}\p{N}/\\&])(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
+  /(^|(?<![\p{L}\p{N}_])_+|[^\p{L}\p{N}_/\\&])(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
 const GITHUB_REFERENCE_IGNORED_ELEMENT_PATTERN = /^(?:a|code|math|pre|script|style|svg|title)$/;
 
 export function githubReferenceUrl(repositoryUrl: string, number: string) {
@@ -32,13 +33,15 @@ function sourceReferences(source: string) {
     const number = match[3];
     if (number === undefined || match.index === undefined) continue;
     const boundary = match[1] ?? "";
-    if (boundary.endsWith("_") && /[\p{L}\p{N}_]/u.test(source[match.index - 1] ?? "")) continue;
+    const end = match.index + match[0].length;
+    const closingUnderscores = /^_+/u.exec(source.slice(end))?.[0];
 
     references.push({
       number,
       escaped: (match[2]?.length ?? 0) % 2 === 1,
       start: match.index + boundary.length,
-      end: match.index + match[0].length,
+      end,
+      ...(closingUnderscores ? { underscoreSuffixEnd: end + closingUnderscores.length } : {}),
     });
   }
   return references;
@@ -63,6 +66,12 @@ export function rehypeGithubReferences({ repositoryUrl }: { readonly repositoryU
       ancestors: readonly MarkdownHtmlAstNode[],
     ) {
       const stack = [...ancestors, node];
+      const isRenderedReference = (reference: SourceReference) =>
+        reference.underscoreSuffixEnd === undefined ||
+        stack.some((current) => {
+          if (current.tagName !== "em" && current.tagName !== "strong") return false;
+          return sourceRange(current)?.end === reference.underscoreSuffixEnd;
+        });
       for (let index = stack.length - 1; index >= 0; index -= 1) {
         const range = sourceRange(stack[index]!);
         if (!range || range.start < 0 || range.end > source.length) continue;
@@ -80,6 +89,7 @@ export function rehypeGithubReferences({ repositoryUrl }: { readonly repositoryU
         const reference = references.find(
           (candidate) =>
             !claimed.has(candidate) &&
+            isRenderedReference(candidate) &&
             candidate.number === number &&
             candidate.start >= range.start &&
             candidate.end <= range.end,
