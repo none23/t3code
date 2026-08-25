@@ -9,7 +9,7 @@ import { remarkNormalizeListItemIndentation } from "./markdown-list-indentation"
 
 const REPOSITORY_URL = "https://github.com/owner/repo";
 
-function renderMarkdown(markdown: string): string {
+function renderMarkdown(markdown: string) {
   return renderToStaticMarkup(
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkNormalizeListItemIndentation]}
@@ -43,6 +43,14 @@ describe("rehypeGithubReferences", () => {
       `See [Issue #123](${REPOSITORY_URL}/issues/123)`,
     ],
     ["a reference beside raw HTML", "<s>should be fixed separately</s> - Fixed in #123"],
+    [
+      "a reference after inline code in an over-indented list item",
+      "-       `\\#123` padding text #123",
+    ],
+    [
+      "a reference after the same escaped reference in an HTML attribute",
+      String.raw`See <span title="\#123">#123</span>`,
+    ],
   ])("renders one link for %s", (_case, markdown) => {
     const html = renderMarkdown(markdown);
 
@@ -56,6 +64,29 @@ describe("rehypeGithubReferences", () => {
     ["fenced code", "Example issue format:\n\n```text\n#123\n```"],
   ])("renders no links inside %s", (_case, markdown) => {
     expect(renderMarkdown(markdown).match(/<a\b/g) ?? []).toHaveLength(0);
+  });
+
+  it.each([
+    [
+      "an unused link definition",
+      String.raw`[unused]: #123
+
+\#123 and #123`,
+      "#123 and ",
+    ],
+    [
+      "a reordered footnote definition",
+      String.raw`[^1]: \#123
+
+#123 body[^1]`,
+      "<p>",
+    ],
+  ])("keeps escapes aligned with %s", (_case, markdown, beforeLink) => {
+    const html = renderMarkdown(markdown);
+    const link = `<a href="${REPOSITORY_URL}/issues/123">#123</a>`;
+
+    expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/123`, "g")) ?? []).toHaveLength(1);
+    expect(html).toContain(`${beforeLink}${link}`);
   });
 
   it("does not link a reference embedded in another identifier", () => {
