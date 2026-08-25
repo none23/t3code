@@ -21,7 +21,7 @@ interface SourceReference {
 const GITHUB_ISSUE_REFERENCE_PATTERN = /(?<![\p{L}\p{N}_/])#([1-9]\d*)(?![\p{L}\p{N}_])/gu;
 // Even backslash runs after identifiers leave an unescaped `#` in rendered Markdown.
 const GITHUB_ISSUE_SOURCE_PATTERN =
-  /(^|(?<![\p{L}\p{N}_])_+|[^\p{L}\p{N}_/\\&]|(?<=[\p{L}\p{N}_])(?=(?:\\\\)*#))(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
+  /(^|(?<![\p{L}\p{N}_])_+|[^\p{L}\p{N}_/\\&]|(?<=[\p{L}\p{N}_])(?=(?:\\\\)+#))(?:(\\*)#|(?<!\\)(?:&#(?:0*35|[xX]0*23);|&num;))([1-9]\d*)(?![\p{L}\p{N}/])/gu;
 const GITHUB_REFERENCE_IGNORED_ELEMENT_PATTERN = /^(?:a|code|math|pre|script|style|svg|title)$/;
 
 export function githubReferenceUrl(repositoryUrl: string, number: string) {

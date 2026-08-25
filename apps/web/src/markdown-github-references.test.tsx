@@ -130,6 +130,10 @@ describe("rehypeGithubReferences", () => {
     expect(html.match(new RegExp(`${REPOSITORY_URL}/issues/5`, "g")) ?? []).toHaveLength(1);
   });
 
+  it("does not let an embedded reference consume an escaped reference with the same number", () => {
+    expect(renderMarkdown(String.raw`C#2 and \#2`)).not.toContain(`${REPOSITORY_URL}/issues/2`);
+  });
+
   it("links an unescaped reference after a literal backslash", () => {
     const html = renderMarkdown(String.raw`text\\#5`);
 
