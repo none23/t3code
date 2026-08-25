@@ -6,6 +6,7 @@ interface MarkdownAstNode {
 }
 
 export interface RemarkGithubReferencesOptions {
+  /** Repository root URL without a trailing slash. */
   readonly repositoryUrl: string;
 }
 
