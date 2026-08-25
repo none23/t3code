@@ -1,6 +1,7 @@
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
 import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { MenuAction } from "@react-native-menu/menu";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
@@ -11,9 +12,10 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
+import { AndroidHeaderIconButton, AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
+import { ControlPillMenu } from "../../components/ControlPill";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { resolveFileSelectionNavigationAction } from "../../lib/adaptive-navigation";
@@ -549,6 +551,65 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
   );
   useRegisterWorkspaceInspector(fileInspector.supported ? renderWorkspaceInspector : undefined);
 
+  const androidFileMenuActions = useMemo<MenuAction[]>(
+    () =>
+      relativePath === null
+        ? []
+        : [
+            ...(canPreview && !isImageFile
+              ? [
+                  {
+                    id: "preview",
+                    title: "Preview",
+                    image: "eye",
+                    state: resolvedActiveMode === "preview" ? ("on" as const) : undefined,
+                  },
+                  {
+                    id: "source",
+                    title: "Source",
+                    image: "doc.text",
+                    state: resolvedActiveMode === "source" ? ("on" as const) : undefined,
+                  },
+                ]
+              : []),
+            { id: "copy-path", title: "Copy path", image: "doc.on.doc" },
+            ...(isBrowserFile && typeof assetPreviewUri === "string"
+              ? [{ id: "open-browser", title: "Open in browser", image: "safari" }]
+              : []),
+            ...(resolvedActiveMode === "preview" && (isBrowserFile || isImageFile)
+              ? [{ id: "refresh", title: "Refresh", image: "arrow.clockwise" }]
+              : []),
+          ],
+    [assetPreviewUri, canPreview, isBrowserFile, isImageFile, relativePath, resolvedActiveMode],
+  );
+  const handleAndroidFileMenuAction = useCallback(
+    (event: { nativeEvent: { event: string } }) => {
+      if (relativePath === null) {
+        return;
+      }
+      switch (event.nativeEvent.event) {
+        case "preview":
+          setModeOverride({ path: relativePath, mode: "preview" });
+          break;
+        case "source":
+          setModeOverride({ path: relativePath, mode: "source" });
+          break;
+        case "copy-path":
+          void copyTextWithHaptic(relativePath);
+          break;
+        case "open-browser":
+          if (typeof assetPreviewUri === "string") {
+            void tryOpenExternalUrl(assetPreviewUri, "file-preview");
+          }
+          break;
+        case "refresh":
+          setPreviewRevision((current) => current + 1);
+          break;
+      }
+    },
+    [assetPreviewUri, relativePath],
+  );
+
   if (selectedThread === null || environmentId === null || threadId === null) {
     return <LoadingScreen message="Opening file..." messagePlacement="above-spinner" />;
   }
@@ -577,6 +638,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
             // Static header config lives in Stack.tsx (SOLID_HEADER_OPTIONS: solid
             // sheet-colored header — this route's content scrolls internally, so
             // there is nothing for glass to sample). Only dynamic values here.
+            headerShown: Platform.OS !== "android",
             headerTintColor: iconColor,
             headerTitle: basename(relativePath),
             title: basename(relativePath),
@@ -584,6 +646,34 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
               Platform.OS === "ios" && headerSubtitle.length > 0 ? headerSubtitle : undefined,
           }}
         />
+        {Platform.OS === "android" ? (
+          <AndroidScreenHeader
+            title={basename(relativePath)}
+            subtitle={headerSubtitle}
+            onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+            trailing={
+              <>
+                {fileInspector.supported ? (
+                  <AndroidHeaderIconButton
+                    accessibilityLabel={
+                      panes.auxiliaryPaneVisible ? "Hide file navigator" : "Show file navigator"
+                    }
+                    icon="sidebar.right"
+                    onPress={toggleAuxiliaryPane}
+                  />
+                ) : null}
+                <ControlPillMenu
+                  actions={androidFileMenuActions}
+                  isAnchoredToRight
+                  title="File actions"
+                  onPressAction={handleAndroidFileMenuAction}
+                >
+                  <AndroidHeaderIconButton accessibilityLabel="File actions" icon="ellipsis" />
+                </ControlPillMenu>
+              </>
+            }
+          />
+        ) : null}
         <WorkspaceSidebarToolbar>
           {fileInspector.supported ? (
             <NativeHeaderToolbar.Button
