@@ -619,6 +619,20 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
     },
     [fileMenuActions],
   );
+  const handleReturnToThread = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    if (environmentId !== null && threadId !== null) {
+      navigation.dispatch(
+        StackActions.replace("Thread", {
+          environmentId: String(environmentId),
+          threadId: String(threadId),
+        }),
+      );
+    }
+  }, [environmentId, navigation, threadId]);
 
   if (selectedThread === null || environmentId === null || threadId === null) {
     return <LoadingScreen message="Opening file..." messagePlacement="above-spinner" />;
@@ -660,7 +674,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
           <AndroidScreenHeader
             title={basename(relativePath)}
             subtitle={headerSubtitle}
-            onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+            onBack={handleReturnToThread}
             trailing={
               <>
                 {fileInspector.supported ? (
@@ -689,14 +703,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
             <NativeHeaderToolbar.Button
               accessibilityLabel="Return to chat"
               icon="chevron.left"
-              onPress={() => {
-                navigation.dispatch(
-                  StackActions.replace("Thread", {
-                    environmentId: String(environmentId),
-                    threadId: String(threadId),
-                  }),
-                );
-              }}
+              onPress={handleReturnToThread}
             />
           ) : null}
         </WorkspaceSidebarToolbar>
