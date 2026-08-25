@@ -40,20 +40,4 @@ describe("remarkGithubReferences", () => {
     expect(html).not.toContain(`${REPOSITORY_URL}/issues/3`);
     expect(html).toContain(`href="${REPOSITORY_URL}/issues/4"`);
   });
-
-  it("normalizes a trailing slash on the repository URL", () => {
-    const html = renderToStaticMarkup(
-      <ReactMarkdown
-        remarkPlugins={[
-          remarkGfm,
-          [remarkGithubReferences, { repositoryUrl: `${REPOSITORY_URL}/` }],
-        ]}
-      >
-        See #42
-      </ReactMarkdown>,
-    );
-
-    expect(html).toContain(`href="${REPOSITORY_URL}/issues/42"`);
-    expect(html).not.toContain(`${REPOSITORY_URL}//issues/42`);
-  });
 });

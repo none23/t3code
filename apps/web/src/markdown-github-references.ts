@@ -14,7 +14,7 @@ const REFERENCE_CONTAINER_TYPES = new Set(["link", "linkReference"]);
 
 /** Turns same-repository `#123` text into the link GitHub uses for an issue or pull request. */
 export function remarkGithubReferences({ repositoryUrl }: RemarkGithubReferencesOptions) {
-  const issueUrlPrefix = `${repositoryUrl.replace(/\/+$/u, "")}/issues/`;
+  const issueUrlPrefix = `${repositoryUrl}/issues/`;
 
   return (tree: MarkdownAstNode) => {
     const visit = (node: MarkdownAstNode) => {
