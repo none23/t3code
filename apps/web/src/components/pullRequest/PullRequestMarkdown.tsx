@@ -1,16 +1,12 @@
 import { ExternalLinkIcon, PaperclipIcon, PlayIcon } from "lucide-react";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { Options as ReactMarkdownOptions } from "react-markdown";
+import { createContext, useContext, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 
-import { remarkGithubReferences } from "../../markdown-github-references";
 import ChatMarkdown from "../ChatMarkdown";
 import { splitPullRequestBody } from "./pullRequestMarkdown.logic";
 
-type RemarkPlugins = NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
-const EMPTY_REMARK_PLUGINS: RemarkPlugins = [];
-const PullRequestRemarkPluginsContext = createContext<RemarkPlugins>(EMPTY_REMARK_PLUGINS);
+const PullRequestMarkdownRepositoryContext = createContext<string | undefined>(undefined);
 
 /** Supplies the repository identity that GitHub's bare issue references leave implicit. */
 export function PullRequestMarkdownRepositoryProvider({
@@ -20,15 +16,10 @@ export function PullRequestMarkdownRepositoryProvider({
   repositoryUrl: string | null;
   children: ReactNode;
 }) {
-  const remarkPlugins = useMemo<RemarkPlugins>(
-    () =>
-      repositoryUrl === null ? EMPTY_REMARK_PLUGINS : [[remarkGithubReferences, { repositoryUrl }]],
-    [repositoryUrl],
-  );
   return (
-    <PullRequestRemarkPluginsContext.Provider value={remarkPlugins}>
+    <PullRequestMarkdownRepositoryContext.Provider value={repositoryUrl ?? undefined}>
       {children}
-    </PullRequestRemarkPluginsContext.Provider>
+    </PullRequestMarkdownRepositoryContext.Provider>
   );
 }
 
@@ -53,7 +44,7 @@ export function PullRequestMarkdown({
   className?: string;
 }) {
   const segments = splitPullRequestBody(text);
-  const additionalRemarkPlugins = useContext(PullRequestRemarkPluginsContext);
+  const githubRepositoryUrl = useContext(PullRequestMarkdownRepositoryContext);
   return (
     <div className={cn("space-y-3", className)}>
       {segments.map((segment) => {
@@ -63,7 +54,7 @@ export function PullRequestMarkdown({
               key={segment.id}
               text={segment.text}
               cwd={cwd}
-              additionalRemarkPlugins={additionalRemarkPlugins}
+              githubRepositoryUrl={githubRepositoryUrl}
             />
           );
         }

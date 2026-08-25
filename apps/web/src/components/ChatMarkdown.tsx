@@ -49,6 +49,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { remarkGithubAlerts } from "../markdown-github-alerts";
+import { remarkGithubReferences } from "../markdown-github-references";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
@@ -134,8 +135,8 @@ interface ChatMarkdownProps {
   lineBreaks?: boolean;
   /** Parse sanitized raw HTML instead of displaying its source text. */
   parseRawHtml?: boolean;
-  /** Markdown extensions owned by a specialized renderer such as pull request Markdown. */
-  additionalRemarkPlugins?: NonNullable<ReactMarkdownOptions["remarkPlugins"]>;
+  /** Link bare GitHub issue and pull request references against this repository. */
+  githubRepositoryUrl?: string | undefined;
 }
 
 const EMPTY_MARKDOWN_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
@@ -1473,7 +1474,7 @@ function ChatMarkdown({
   className,
   lineBreaks = false,
   parseRawHtml = true,
-  additionalRemarkPlugins,
+  githubRepositoryUrl,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
@@ -1504,8 +1505,11 @@ function ChatMarkdown({
     const plugins = lineBreaks
       ? CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS
       : CHAT_MARKDOWN_REMARK_PLUGINS;
-    return additionalRemarkPlugins?.length ? [...plugins, ...additionalRemarkPlugins] : plugins;
-  }, [additionalRemarkPlugins, lineBreaks]);
+
+    return githubRepositoryUrl
+      ? [...plugins, [remarkGithubReferences, { repositoryUrl: githubRepositoryUrl }]]
+      : plugins;
+  }, [githubRepositoryUrl, lineBreaks]);
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
       string,

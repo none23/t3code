@@ -1,19 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Options as ReactMarkdownOptions } from "react-markdown";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-vi.mock("../ChatMarkdown", async () => {
-  const { default: ReactMarkdown } = await import("react-markdown");
-  return {
-    default: ({
-      text,
-      additionalRemarkPlugins,
-    }: {
-      text: string;
-      additionalRemarkPlugins?: ReactMarkdownOptions["remarkPlugins"];
-    }) => <ReactMarkdown remarkPlugins={additionalRemarkPlugins}>{text}</ReactMarkdown>,
-  };
-});
+vi.mock("../ChatMarkdown", () => ({
+  default: ({ text, githubRepositoryUrl }: { text: string; githubRepositoryUrl?: string }) => (
+    <div data-github-repository-url={githubRepositoryUrl}>{text}</div>
+  ),
+}));
 
 import { PullRequestMarkdown, PullRequestMarkdownRepositoryProvider } from "./PullRequestMarkdown";
 
@@ -25,14 +17,14 @@ function renderPullRequestMarkdown(repositoryUrl: string | null): string {
   );
 }
 
-describe("PullRequestMarkdown GitHub references", () => {
-  it("links a reference when the pull request supplies a GitHub repository", () => {
+describe("PullRequestMarkdown repository context", () => {
+  it("passes the GitHub repository to its Markdown renderer", () => {
     expect(renderPullRequestMarkdown("https://github.com/pingdotgg/t3code")).toContain(
-      'href="https://github.com/pingdotgg/t3code/issues/7742"',
+      'data-github-repository-url="https://github.com/pingdotgg/t3code"',
     );
   });
 
-  it("leaves a reference alone without GitHub repository context", () => {
-    expect(renderPullRequestMarkdown(null)).not.toContain("href=");
+  it("omits the repository when the provider does not supply one", () => {
+    expect(renderPullRequestMarkdown(null)).not.toContain("data-github-repository-url");
   });
 });
