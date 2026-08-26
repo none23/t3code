@@ -1,5 +1,6 @@
 import { ExternalLinkIcon, PaperclipIcon, PlayIcon } from "lucide-react";
 import { createContext, useContext, type ReactNode } from "react";
+import type { EnvironmentId } from "@t3tools/contracts";
 
 import { cn } from "~/lib/utils";
 
@@ -37,10 +38,12 @@ export function PullRequestMarkdownRepositoryProvider({
 export function PullRequestMarkdown({
   text,
   cwd,
+  environmentId,
   className,
 }: {
   text: string;
   cwd: string;
+  environmentId: EnvironmentId;
   className?: string;
 }) {
   const segments = splitPullRequestBody(text);
@@ -55,6 +58,7 @@ export function PullRequestMarkdown({
               text={segment.text}
               cwd={cwd}
               githubRepositoryUrl={githubRepositoryUrl}
+              environmentId={environmentId}
             />
           );
         }
