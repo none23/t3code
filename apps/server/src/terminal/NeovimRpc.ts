@@ -71,19 +71,7 @@ const INSTALL_AUTOCMDS_LUA = String.raw`
 local channel = ...
 local group = vim.api.nvim_create_augroup("T3CodeEmbeddedNeovim", { clear = true })
 
-local function notify_dirty()
-  local dirty = false
-  for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].modified then
-      dirty = true
-      break
-    end
-  end
-  vim.rpcnotify(channel, "t3_dirty", dirty)
-end
-
-local function notify_active_file()
-  local active_path = vim.api.nvim_buf_get_name(0)
+local function listed_file_paths()
   local paths = {}
   local seen = {}
   for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
@@ -99,8 +87,34 @@ local function notify_active_file()
       end
     end
   end
+  return paths
+end
+
+local function notify_dirty()
+  local dirty = false
+  for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buffer) and vim.bo[buffer].modified then
+      dirty = true
+      break
+    end
+  end
+  vim.rpcnotify(channel, "t3_dirty", dirty)
+end
+
+local function notify_active_file()
+  local active_path = vim.api.nvim_buf_get_name(0)
+  local paths = listed_file_paths()
   vim.rpcnotify(channel, "t3_active_file", active_path ~= "" and active_path or vim.NIL, paths)
 end
+
+_G.T3CodeEmbeddedNeovimQuitCommand = function()
+  if vim.fn.getcmdtype() ~= ":" or vim.fn.getcmdline() ~= "q" then
+    return "q"
+  end
+  return #listed_file_paths() > 1 and "bdelete" or "q"
+end
+
+vim.cmd([[cnoreabbrev <expr> q v:lua.T3CodeEmbeddedNeovimQuitCommand()]])
 
 vim.api.nvim_create_autocmd({ "BufModifiedSet", "BufAdd", "BufDelete", "BufWipeout" }, {
   group = group,
