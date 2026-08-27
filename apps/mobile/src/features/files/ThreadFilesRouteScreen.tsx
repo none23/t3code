@@ -470,6 +470,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
   const navigation = useNavigation();
   const { fileInspector, panes, toggleAuxiliaryPane } = useAdaptiveWorkspaceLayout();
   const iconColor = useThemeColor("--color-icon");
+  const isAndroid = Platform.OS === "android";
   const params = props.route.params;
   const relativePath = normalizeRoutePath(params.path);
   const targetLine = normalizeRouteLine(firstRouteParam(params.line));
@@ -665,7 +666,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
             // Static header config lives in Stack.tsx (SOLID_HEADER_OPTIONS: solid
             // sheet-colored header — this route's content scrolls internally, so
             // there is nothing for glass to sample). Only dynamic values here.
-            headerShown: Platform.OS !== "android",
+            headerShown: !isAndroid,
             headerTintColor: iconColor,
             headerTitle: basename(relativePath),
             title: basename(relativePath),
@@ -673,7 +674,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
               Platform.OS === "ios" && headerSubtitle.length > 0 ? headerSubtitle : undefined,
           }}
         />
-        {Platform.OS === "android" ? (
+        {isAndroid ? (
           <AndroidScreenHeader
             title={basename(relativePath)}
             subtitle={headerSubtitle}
