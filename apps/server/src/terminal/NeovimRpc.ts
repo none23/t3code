@@ -66,11 +66,17 @@ return true
 `;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
-const STARTUP_POLL_INTERVAL_MS = 25;
+const STARTUP_REQUEST_TIMEOUT_MS = 30_000;
 
 const INSTALL_AUTOCMDS_LUA = String.raw`
 local channel = ...
-local group = vim.api.nvim_create_augroup("T3CodeEmbeddedNeovim", { clear = true })
+
+local function t3_notify(method, ...)
+  if next(vim.api.nvim_get_chan_info(channel)) == nil then
+    return
+  end
+  vim.rpcnotify(channel, method, ...)
+end
 
 local function listed_file_paths()
   local paths = {}
@@ -99,48 +105,65 @@ local function notify_dirty()
       break
     end
   end
-  vim.rpcnotify(channel, "t3_dirty", dirty)
+  t3_notify("t3_dirty", dirty)
 end
 
 local function notify_active_file()
   local active_path = vim.api.nvim_buf_get_name(0)
   local paths = listed_file_paths()
-  vim.rpcnotify(channel, "t3_active_file", active_path ~= "" and active_path or vim.NIL, paths)
+  t3_notify("t3_active_file", active_path ~= "" and active_path or vim.NIL, paths)
 end
 
-_G.T3CodeEmbeddedNeovimQuitCommand = function()
-  if vim.fn.getcmdtype() ~= ":" or vim.fn.getcmdline() ~= "q" then
-    return "q"
+local function install()
+  local group = vim.api.nvim_create_augroup("T3CodeEmbeddedNeovim", { clear = true })
+
+  _G.T3CodeEmbeddedNeovimQuitCommand = function()
+    if vim.fn.getcmdtype() ~= ":" or vim.fn.getcmdline() ~= "q" then
+      return "q"
+    end
+    return #listed_file_paths() > 1 and "bdelete" or "q"
   end
-  return #listed_file_paths() > 1 and "bdelete" or "q"
+
+  vim.cmd([[cnoreabbrev <expr> q v:lua.T3CodeEmbeddedNeovimQuitCommand()]])
+
+  vim.api.nvim_create_autocmd({ "BufModifiedSet", "BufAdd", "BufDelete", "BufWipeout" }, {
+    group = group,
+    callback = function()
+      vim.schedule(notify_dirty)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    group = group,
+    callback = function(args)
+      t3_notify("t3_written", vim.api.nvim_buf_get_name(args.buf))
+      vim.schedule(notify_dirty)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufAdd", "BufDelete", "BufWipeout", "BufEnter" }, {
+    group = group,
+    callback = function()
+      vim.schedule(notify_active_file)
+    end,
+  })
+
+  notify_dirty()
+  notify_active_file()
 end
 
-vim.cmd([[cnoreabbrev <expr> q v:lua.T3CodeEmbeddedNeovimQuitCommand()]])
-
-vim.api.nvim_create_autocmd({ "BufModifiedSet", "BufAdd", "BufDelete", "BufWipeout" }, {
-  group = group,
-  callback = function()
-    vim.schedule(notify_dirty)
-  end,
-})
-
-vim.api.nvim_create_autocmd("BufWritePost", {
-  group = group,
-  callback = function(args)
-    vim.rpcnotify(channel, "t3_written", vim.api.nvim_buf_get_name(args.buf))
-    vim.schedule(notify_dirty)
-  end,
-})
-
-vim.api.nvim_create_autocmd({ "BufAdd", "BufDelete", "BufWipeout", "BufEnter" }, {
-  group = group,
-  callback = function()
-    vim.schedule(notify_active_file)
-  end,
-})
-
-notify_dirty()
-notify_active_file()
+if vim.v.vim_did_enter == 1 then
+  install()
+else
+  local bootstrap_group = vim.api.nvim_create_augroup("T3CodeEmbeddedNeovimBootstrap", {
+    clear = true,
+  })
+  vim.api.nvim_create_autocmd("VimEnter", {
+    group = bootstrap_group,
+    once = true,
+    callback = install,
+  })
+end
 return true
 `;
 
@@ -258,31 +281,23 @@ export class NeovimRpcClient {
     notifications: NeovimRpcNotifications,
   ): Promise<NeovimRpcClient> {
     const client = new NeovimRpcClient(await connectWithRetry(address), notifications);
-    const apiInfo = await client.request("nvim_get_api_info", []);
+    const apiInfo = await client.request("nvim_get_api_info", [], STARTUP_REQUEST_TIMEOUT_MS);
     if (!Array.isArray(apiInfo) || typeof apiInfo[0] !== "number") {
       client.close();
       throw new Error("Neovim returned an invalid API handshake.");
     }
     const channel = apiInfo[0];
-    await client.request("nvim_set_client_info", [
-      "t3-code",
-      { major: 1 },
-      "remote",
-      {},
-      { website: "https://t3.codes" },
-    ]);
-    await client.#waitForVimEnter();
-    await client.request("nvim_exec_lua", [INSTALL_AUTOCMDS_LUA, [channel]]);
+    await client.request(
+      "nvim_set_client_info",
+      ["t3-code", { major: 1 }, "remote", {}, { website: "https://t3.codes" }],
+      STARTUP_REQUEST_TIMEOUT_MS,
+    );
+    await client.request(
+      "nvim_exec_lua",
+      [INSTALL_AUTOCMDS_LUA, [channel]],
+      STARTUP_REQUEST_TIMEOUT_MS,
+    );
     return client;
-  }
-
-  async #waitForVimEnter(): Promise<void> {
-    const deadline = Date.now() + DEFAULT_REQUEST_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      if ((await this.request("nvim_eval", ["v:vim_did_enter"])) === 1) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, STARTUP_POLL_INTERVAL_MS));
-    }
-    throw new Error("Neovim startup timed out before VimEnter.");
   }
 
   async openFile(path: string, line?: number, column = 1): Promise<void> {

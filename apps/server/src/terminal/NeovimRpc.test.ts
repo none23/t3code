@@ -57,7 +57,6 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
       const luaSources: string[] = [];
       const luaArguments: unknown[][] = [];
       let responseCount = 0;
-      let startupChecks = 0;
       let notifyActiveFile:
         | ((value: { path: string | null; paths: ReadonlyArray<string> }) => void)
         | undefined;
@@ -86,7 +85,6 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
             if (method === "nvim_unanswered") continue;
             let result: unknown = true;
             if (method === "nvim_get_api_info") result = [7, {}];
-            else if (method === "nvim_eval") result = startupChecks++ > 0 ? 1 : 0;
             else if (
               method === "nvim_exec_lua" &&
               methods.filter((entry) => entry === method).length > 1
@@ -131,6 +129,8 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
         expect(luaSources[0]).toContain(
           "cnoreabbrev <expr> q v:lua.T3CodeEmbeddedNeovimQuitCommand()",
         );
+        expect(luaSources[0]).toContain("vim.api.nvim_get_chan_info(channel)");
+        expect(luaSources[0]).toContain('vim.api.nvim_create_autocmd("VimEnter"');
         expect(luaSources[0]).toContain('return #listed_file_paths() > 1 and "bdelete" or "q"');
         await client.openFile("/repo/other.ts");
         expect(luaSources.at(-1)).toContain("vim.api.nvim_buf_get_name(0) ~= path");
@@ -144,8 +144,6 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
         expect(methods).toEqual([
           "nvim_get_api_info",
           "nvim_set_client_info",
-          "nvim_eval",
-          "nvim_eval",
           "nvim_exec_lua",
           "nvim_exec_lua",
           "nvim_exec_lua",
