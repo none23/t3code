@@ -8,6 +8,10 @@
  */
 import {
   DEFAULT_TERMINAL_ID,
+  NEOVIM_TERMINAL_ID,
+  NeovimControlError,
+  NeovimFileNotFoundError,
+  NeovimUnavailableError,
   TerminalCwdError,
   TerminalCwdNotDirectoryError,
   TerminalCwdNotFoundError,
@@ -37,6 +41,12 @@ import {
   ClaudeSettings,
   CodexSettings,
   ProviderInstanceId,
+  type NeovimChecktimeInput,
+  type NeovimCloseInput,
+  type NeovimCloseAllInput,
+  type NeovimError,
+  type NeovimOpenInput,
+  type TerminalSessionKind,
 } from "@t3tools/contracts";
 import { makeKeyedCoalescingWorker } from "@t3tools/shared/KeyedCoalescingWorker";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
@@ -72,7 +82,9 @@ import { expandHomePath } from "../pathExpansion.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as PortScanner from "../preview/PortScanner.ts";
 import * as NativeTelemetryClient from "../resourceTelemetry/NativeTelemetryClient.ts";
+import * as WorkspaceEntries from "../workspace/WorkspaceEntries.ts";
 import * as PtyAdapter from "./PtyAdapter.ts";
+import { createNeovimRpcEndpoint, NeovimRpcClient, type NeovimRpcEndpoint } from "./NeovimRpc.ts";
 
 export {
   TerminalCwdError,
@@ -99,6 +111,7 @@ const DEFAULT_PROCESS_KILL_GRACE_MS = 1_000;
 const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
+const NEOVIM_HISTORY_BYTE_LIMIT = 128 * 1024;
 const TERMINAL_ENV_BLOCKLIST = new Set(["PORT", "ELECTRON_RENDERER_PORT", "ELECTRON_RUN_AS_NODE"]);
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const MAX_TERMINAL_LABEL_LENGTH = 128;
@@ -214,6 +227,13 @@ export class TerminalManager extends Context.Service<
     readonly subscribeMetadata: (
       listener: (event: TerminalMetadataStreamEvent) => Effect.Effect<void>,
     ) => Effect.Effect<() => void>;
+
+    readonly openNeovim: (
+      input: NeovimOpenInput,
+    ) => Effect.Effect<TerminalSessionSnapshot, NeovimError>;
+    readonly checktimeNeovim: (input: NeovimChecktimeInput) => Effect.Effect<void, NeovimError>;
+    readonly closeNeovim: (input: NeovimCloseInput) => Effect.Effect<void, NeovimError>;
+    readonly closeAllNeovim: (input: NeovimCloseAllInput) => Effect.Effect<void, NeovimError>;
   }
 >()("t3/terminal/Manager/TerminalManager") {}
 
@@ -263,6 +283,8 @@ interface TerminalSessionState {
   terminalId: string;
   cwd: string;
   worktreePath: string | null;
+  kind: TerminalSessionKind;
+  dirty: boolean;
   status: TerminalSessionStatus;
   pid: number | null;
   history: BoundedTerminalHistory;
@@ -283,6 +305,10 @@ interface TerminalSessionState {
   /** Normalized child command name when `hasRunningSubprocess`; cleared when idle. */
   childCommandLabel: string | null;
   runtimeEnv: Record<string, string> | null;
+  neovimControl: {
+    client: NeovimRpcClient;
+    endpoint: NeovimRpcEndpoint;
+  } | null;
 }
 
 interface PersistHistoryRequest {
@@ -312,6 +338,7 @@ type DrainProcessEventAction =
       sequence: number;
       exitCode: number | null;
       exitSignal: number | null;
+      neovimControl: TerminalSessionState["neovimControl"];
     };
 
 interface TerminalManagerState {
@@ -358,6 +385,8 @@ function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
     terminalId: session.terminalId,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
+    kind: session.kind,
+    dirty: session.dirty,
     status: session.status,
     pid: session.pid,
     history: session.history.value(),
@@ -375,6 +404,8 @@ function summary(session: TerminalSessionState): TerminalSummary {
     terminalId: session.terminalId,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
+    kind: session.kind,
+    dirty: session.dirty,
     status: session.status,
     pid: session.pid,
     exitCode: session.exitCode,
@@ -396,6 +427,9 @@ function shouldPublishTerminalMetadataEvent(event: TerminalEvent): boolean {
       return true;
     case "output":
     case "cleared":
+    case "neovimState":
+    case "neovimWritten":
+    case "neovimActiveFile":
       return false;
   }
 }
@@ -414,6 +448,9 @@ function terminalEventToAttachEvent(event: TerminalEvent): TerminalAttachStreamE
     case "cleared":
     case "restarted":
     case "activity":
+    case "neovimState":
+    case "neovimWritten":
+    case "neovimActiveFile":
       return event;
   }
 }
@@ -1342,6 +1379,7 @@ interface TerminalManagerOptions {
     Record<string, string>,
     TerminalProviderInstanceNotFoundError | TerminalProviderEnvironmentError
   >;
+  onNeovimWrite?: (input: { readonly cwd: string; readonly path: string }) => Effect.Effect<void>;
 }
 
 export const resolveProviderInstanceTerminalEnvironment = Effect.fn(
@@ -1403,6 +1441,7 @@ export const make = Effect.fn("TerminalManager.make")(function* () {
       env,
     }),
   );
+  const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
   return yield* makeWithOptions({
     logsDir: terminalLogsDir,
     ptyAdapter,
@@ -1414,6 +1453,7 @@ export const make = Effect.fn("TerminalManager.make")(function* () {
     registerTerminalProcesses: portDiscovery.registerTerminalProcesses,
     unregisterTerminal: portDiscovery.unregisterTerminal,
     resolveProviderInstanceEnvironment,
+    onNeovimWrite: ({ cwd }) => workspaceEntries.refresh(cwd).pipe(Effect.ignore),
   });
 });
 
@@ -1519,6 +1559,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     options.maxRetainedInactiveSessions ?? DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS;
   const registerTerminalProcesses = options.registerTerminalProcesses ?? (() => Effect.void);
   const unregisterTerminal = options.unregisterTerminal ?? (() => Effect.void);
+  const onNeovimWrite = options.onNeovimWrite ?? (() => Effect.void);
 
   yield* fileSystem.makeDirectory(logsDir, { recursive: true }).pipe(Effect.orDie);
 
@@ -1723,6 +1764,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     terminalId: string,
     history: BoundedTerminalHistory,
   ) {
+    if (terminalId === NEOVIM_TERMINAL_ID) return;
     yield* persistWorker.enqueue(toSessionKey(threadId, terminalId), {
       history,
       immediate: false,
@@ -1741,6 +1783,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     terminalId: string,
     history: BoundedTerminalHistory,
   ) {
+    if (terminalId === NEOVIM_TERMINAL_ID) return;
     yield* persistWorker.enqueue(toSessionKey(threadId, terminalId), {
       history,
       immediate: true,
@@ -1776,15 +1819,20 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     threadId: string,
     terminalId: string,
   ) {
+    if (terminalId === NEOVIM_TERMINAL_ID) return "";
     const nextPath = historyPath(threadId, terminalId);
     if (
-      yield* fileSystem
-        .exists(nextPath)
-        .pipe(
-          Effect.mapError(
-            (cause) => new TerminalHistoryError({ operation: "read", threadId, terminalId, cause }),
-          ),
-        )
+      yield* fileSystem.exists(nextPath).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TerminalHistoryError({
+              operation: "read",
+              threadId,
+              terminalId,
+              cause,
+            }),
+        ),
+      )
     ) {
       const { history: raw, truncated } = yield* readHistoryTail(nextPath).pipe(
         Effect.scoped,
@@ -1813,14 +1861,17 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
     const legacyPath = legacyHistoryPath(threadId);
     if (
-      !(yield* fileSystem
-        .exists(legacyPath)
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalHistoryError({ operation: "migrate", threadId, terminalId, cause }),
-          ),
-        ))
+      !(yield* fileSystem.exists(legacyPath).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TerminalHistoryError({
+              operation: "migrate",
+              threadId,
+              terminalId,
+              cause,
+            }),
+        ),
+      ))
     ) {
       return new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit);
     }
@@ -2033,11 +2084,14 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         }
 
         const process = session.process;
+        const neovimControl = session.neovimControl;
         cleanupProcessHandles(session);
         session.process = null;
         session.pid = null;
         session.hasRunningSubprocess = false;
         session.childCommandLabel = null;
+        session.neovimControl = null;
+        session.dirty = false;
         session.status = "exited";
         session.pendingHistoryControlSequence = "";
         session.pendingProcessEvents = [];
@@ -2059,6 +2113,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           sequence: eventStamp.sequence,
           exitCode: session.exitCode,
           exitSignal: session.exitSignal,
+          neovimControl,
         } as const;
       });
 
@@ -2082,6 +2137,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       }
 
       yield* clearKillFiber(action.process);
+      if (action.neovimControl) {
+        action.neovimControl.client.close();
+        yield* Effect.tryPromise(() => action.neovimControl!.endpoint.cleanup()).pipe(
+          Effect.ignoreCause({ log: true }),
+        );
+      }
       yield* unregisterTerminal({
         threadId: action.threadId,
         terminalId: action.terminalId,
@@ -2101,7 +2162,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
   const stopProcess = Effect.fn("terminal.stopProcess")(function* (session: TerminalSessionState) {
     const process = session.process;
-    if (!process) return;
+    const neovimControl = session.neovimControl;
+    if (!process && !neovimControl) return;
 
     const updatedAt = yield* nowIso;
     yield* modifyManagerState((state) => {
@@ -2110,6 +2172,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       session.pid = null;
       session.hasRunningSubprocess = false;
       session.childCommandLabel = null;
+      session.neovimControl = null;
+      session.dirty = false;
       session.status = "exited";
       session.pendingHistoryControlSequence = "";
       session.pendingProcessEvents = [];
@@ -2118,6 +2182,15 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       session.updatedAt = updatedAt;
       return [undefined, state] as const;
     });
+
+    if (neovimControl) {
+      neovimControl.client.close();
+      yield* Effect.tryPromise(() => neovimControl.endpoint.cleanup()).pipe(
+        Effect.ignoreCause({ log: true }),
+      );
+    }
+
+    if (!process) return;
 
     yield* clearKillFiber(process);
     yield* unregisterTerminal({
@@ -2187,6 +2260,11 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     session: TerminalSessionState,
     input: TerminalStartInput,
     eventType: "started" | "restarted",
+    initialNeovimFile?: {
+      readonly path: string;
+      readonly line: number;
+      readonly column: number;
+    },
   ) {
     yield* stopProcess(session);
     yield* Effect.annotateCurrentSpan({
@@ -2216,30 +2294,156 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
     let ptyProcess: PtyAdapter.PtyProcess | null = null;
     let startedShell: string | null = null;
+    let neovimEndpoint: NeovimRpcEndpoint | null = null;
 
     const startResult = yield* Effect.result(
       increment(terminalSessionsTotal, { lifecycle: eventType }).pipe(
         Effect.andThen(
           Effect.gen(function* () {
-            const shellCandidates = resolveShellCandidates(shellResolver, platform, baseEnv);
             const terminalEnv = createTerminalSpawnEnv(baseEnv, session.runtimeEnv);
-            const spawnResult = yield* trySpawn(shellCandidates, terminalEnv, session);
-            ptyProcess = spawnResult.process;
-            startedShell = spawnResult.shellLabel;
+            if (session.kind === "neovim") {
+              delete terminalEnv.NVIM;
+              delete terminalEnv.NVIM_LISTEN_ADDRESS;
+              neovimEndpoint = yield* Effect.tryPromise({
+                try: () => createNeovimRpcEndpoint(platform),
+                catch: (cause) =>
+                  new PtyAdapter.PtySpawnError({
+                    adapter: "neovim-endpoint",
+                    cause,
+                  }),
+              });
+              ptyProcess = yield* options.ptyAdapter.spawn({
+                shell: "nvim",
+                args: [
+                  "--listen",
+                  neovimEndpoint.address,
+                  ...(initialNeovimFile
+                    ? [
+                        `+call cursor(${initialNeovimFile.line},${initialNeovimFile.column})`,
+                        "--",
+                        initialNeovimFile.path,
+                      ]
+                    : []),
+                ],
+                cwd: session.cwd,
+                cols: session.cols,
+                rows: session.rows,
+                env: terminalEnv,
+              });
+              startedShell = "nvim";
+            } else {
+              const shellCandidates = resolveShellCandidates(shellResolver, platform, baseEnv);
+              const spawnResult = yield* trySpawn(shellCandidates, terminalEnv, session);
+              ptyProcess = spawnResult.process;
+              startedShell = spawnResult.shellLabel;
+            }
 
             const processPid = ptyProcess.pid;
             const unsubscribeData = ptyProcess.onData((data) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "output", data })) {
+              if (
+                !enqueueProcessEvent(session, processPid, {
+                  type: "output",
+                  data,
+                })
+              ) {
                 return;
               }
               runFork(drainProcessEvents(session, processPid));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
+              if (
+                !enqueueProcessEvent(session, processPid, {
+                  type: "exit",
+                  event,
+                })
+              ) {
                 return;
               }
               runFork(drainProcessEvents(session, processPid));
             });
+
+            if (session.kind === "neovim" && neovimEndpoint) {
+              const endpoint = neovimEndpoint;
+              const client = yield* Effect.tryPromise({
+                try: () =>
+                  NeovimRpcClient.connect(endpoint.address, {
+                    onDirty: (dirty) => {
+                      runFork(
+                        withThreadLock(
+                          session.threadId,
+                          Effect.gen(function* () {
+                            const current = yield* getSession(session.threadId, session.terminalId);
+                            if (
+                              Option.isNone(current) ||
+                              current.value !== session ||
+                              session.kind !== "neovim" ||
+                              session.dirty === dirty
+                            )
+                              return;
+                            session.dirty = dirty;
+                            const stamp = advanceEventSequence(session);
+                            yield* publishEvent({
+                              type: "neovimState",
+                              threadId: session.threadId,
+                              terminalId: session.terminalId,
+                              sequence: stamp.sequence,
+                              dirty,
+                            });
+                          }),
+                        ),
+                      );
+                    },
+                    onWritten: (writtenPath) => {
+                      runFork(
+                        withThreadLock(
+                          session.threadId,
+                          Effect.gen(function* () {
+                            const current = yield* getSession(session.threadId, session.terminalId);
+                            if (Option.isNone(current) || current.value !== session) return;
+                            const stamp = advanceEventSequence(session);
+                            yield* publishEvent({
+                              type: "neovimWritten",
+                              threadId: session.threadId,
+                              terminalId: session.terminalId,
+                              sequence: stamp.sequence,
+                              path: writtenPath,
+                            });
+                            yield* onNeovimWrite({
+                              cwd: session.cwd,
+                              path: writtenPath,
+                            }).pipe(Effect.ignoreCause({ log: true }));
+                          }),
+                        ),
+                      );
+                    },
+                    onActiveFile: (activePath) => {
+                      runFork(
+                        withThreadLock(
+                          session.threadId,
+                          Effect.gen(function* () {
+                            const current = yield* getSession(session.threadId, session.terminalId);
+                            if (Option.isNone(current) || current.value !== session) return;
+                            const stamp = advanceEventSequence(session);
+                            yield* publishEvent({
+                              type: "neovimActiveFile",
+                              threadId: session.threadId,
+                              terminalId: session.terminalId,
+                              sequence: stamp.sequence,
+                              path: activePath,
+                            });
+                          }),
+                        ),
+                      );
+                    },
+                  }),
+                catch: (cause) =>
+                  new PtyAdapter.PtySpawnError({
+                    adapter: "neovim-rpc",
+                    cause,
+                  }),
+              });
+              session.neovimControl = { client, endpoint };
+            }
 
             let eventStamp: ReturnType<typeof advanceEventSequence> = {
               updatedAt: session.updatedAt,
@@ -2276,6 +2480,15 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       if (ptyProcess) {
         yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
       }
+      if (session.neovimControl) {
+        session.neovimControl.client.close();
+        session.neovimControl = null;
+      }
+      if (neovimEndpoint) {
+        yield* Effect.tryPromise(() => neovimEndpoint!.cleanup()).pipe(
+          Effect.ignoreCause({ log: true }),
+        );
+      }
 
       yield* modifyManagerState((state) => {
         cleanupProcessHandles(session);
@@ -2284,6 +2497,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session.process = null;
         session.hasRunningSubprocess = false;
         session.childCommandLabel = null;
+        session.neovimControl = null;
+        session.dirty = false;
         session.pendingProcessEvents = [];
         session.pendingProcessEventIndex = 0;
         session.processEventDrainRunning = false;
@@ -2504,6 +2719,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session: TerminalSessionState,
       ) {
         cleanupProcessHandles(session);
+        if (session.neovimControl) {
+          session.neovimControl.client.close();
+          yield* Effect.tryPromise(() => session.neovimControl!.endpoint.cleanup()).pipe(
+            Effect.ignoreCause({ log: true }),
+          );
+        }
         if (!session.process) return;
         yield* clearKillFiber(session.process);
         yield* runKillEscalation(session.process, session.threadId, session.terminalId);
@@ -2532,6 +2753,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         terminalId,
         cwd: input.cwd,
         worktreePath: input.worktreePath ?? null,
+        kind: "shell",
+        dirty: false,
         status: "starting",
         pid: null,
         history,
@@ -2551,6 +2774,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         hasRunningSubprocess: false,
         childCommandLabel: null,
         runtimeEnv: normalizedRuntimeEnv(input.env),
+        neovimControl: null,
       };
 
       const createdSession = session;
@@ -3035,6 +3259,177 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       }),
     );
 
+  const openNeovim: TerminalManager["Service"]["openNeovim"] = (input) =>
+    withThreadLock(
+      input.threadId,
+      Effect.gen(function* () {
+        yield* assertValidCwd(input.cwd);
+        const absolutePath = path.resolve(input.cwd, input.path);
+        const isFile = yield* fileSystem.stat(absolutePath).pipe(
+          Effect.map((info) => info.type === "File"),
+          Effect.orElseSucceed(() => false),
+        );
+        if (!isFile) return yield* new NeovimFileNotFoundError({ path: absolutePath });
+
+        const existing = yield* getSession(input.threadId, NEOVIM_TERMINAL_ID);
+        let session: TerminalSessionState;
+        if (Option.isNone(existing)) {
+          const cols = input.cols ?? DEFAULT_OPEN_COLS;
+          const rows = input.rows ?? DEFAULT_OPEN_ROWS;
+          session = {
+            threadId: input.threadId,
+            terminalId: NEOVIM_TERMINAL_ID,
+            cwd: input.cwd,
+            worktreePath: input.worktreePath ?? null,
+            kind: "neovim",
+            dirty: false,
+            status: "starting",
+            pid: null,
+            history: new BoundedTerminalHistory(
+              historyLineLimit,
+              "",
+              NEOVIM_HISTORY_BYTE_LIMIT,
+            ),
+            pendingHistoryControlSequence: "",
+            pendingProcessEvents: [],
+            pendingProcessEventIndex: 0,
+            processEventDrainRunning: false,
+            exitCode: null,
+            exitSignal: null,
+            updatedAt: yield* nowIso,
+            eventSequence: 0,
+            cols,
+            rows,
+            process: null,
+            unsubscribeData: null,
+            unsubscribeExit: null,
+            hasRunningSubprocess: false,
+            childCommandLabel: null,
+            runtimeEnv: normalizedRuntimeEnv(input.env),
+            neovimControl: null,
+          };
+          yield* modifyManagerState((state) => {
+            const sessions = new Map(state.sessions);
+            sessions.set(toSessionKey(input.threadId, NEOVIM_TERMINAL_ID), session);
+            return [undefined, { ...state, sessions }] as const;
+          });
+        } else {
+          session = existing.value;
+          if (session.kind !== "neovim") {
+            return yield* new NeovimControlError({
+              message: "The reserved Neovim terminal id is already in use.",
+            });
+          }
+          const nextWorktreePath = input.worktreePath ?? null;
+          const nextRuntimeEnv = normalizedRuntimeEnv(input.env);
+          if (
+            session.cwd !== input.cwd ||
+            session.worktreePath !== nextWorktreePath ||
+            !Equal.equals(session.runtimeEnv, nextRuntimeEnv)
+          ) {
+            yield* stopProcess(session);
+            session.cwd = input.cwd;
+            session.worktreePath = nextWorktreePath;
+            session.runtimeEnv = nextRuntimeEnv;
+            session.history = "";
+          }
+          session.cols = input.cols ?? session.cols;
+          session.rows = input.rows ?? session.rows;
+        }
+
+        const startingNeovim = !session.process;
+        if (startingNeovim) {
+          yield* startSession(
+            session,
+            {
+              threadId: input.threadId,
+              terminalId: NEOVIM_TERMINAL_ID,
+              cwd: input.cwd,
+              worktreePath: input.worktreePath ?? null,
+              cols: session.cols,
+              rows: session.rows,
+              ...(input.env ? { env: input.env } : {}),
+            },
+            "started",
+            {
+              path: absolutePath,
+              line: input.line ?? 1,
+              column: input.column ?? 1,
+            },
+          );
+        }
+
+        if (session.status !== "running" || !session.neovimControl) {
+          return yield* new NeovimUnavailableError({
+            message: "Neovim could not be started from the environment PATH.",
+          });
+        }
+
+        if (!startingNeovim) {
+          yield* Effect.tryPromise({
+            try: () =>
+              session.neovimControl!.client.openFile(
+                absolutePath,
+                input.line ?? 1,
+                input.column ?? 1,
+              ),
+            catch: (cause) =>
+              new NeovimControlError({
+                message:
+                  cause instanceof Error ? cause.message : "Unable to open the file in Neovim.",
+              }),
+          });
+        }
+        return snapshot(session);
+      }),
+    );
+
+  const checktimeNeovim: TerminalManager["Service"]["checktimeNeovim"] = (input) =>
+    withThreadLock(
+      input.threadId,
+      Effect.gen(function* () {
+        const session = yield* getSession(input.threadId, NEOVIM_TERMINAL_ID);
+        if (Option.isNone(session) || !session.value.neovimControl) return;
+        yield* Effect.tryPromise({
+          try: () => session.value.neovimControl!.client.checktime(),
+          catch: (cause) =>
+            new NeovimControlError({
+              message: cause instanceof Error ? cause.message : "Unable to refresh Neovim buffers.",
+            }),
+        });
+      }),
+    );
+
+  const closeNeovim: TerminalManager["Service"]["closeNeovim"] = (input) =>
+    Effect.gen(function* () {
+      const session = yield* getSession(input.threadId, NEOVIM_TERMINAL_ID);
+      if (Option.isNone(session)) return;
+
+      // A frozen RPC call may hold the thread lock. Closing the socket rejects
+      // that call so serialized process cleanup can proceed.
+      session.value.neovimControl?.client.close();
+      yield* withThreadLock(
+        input.threadId,
+        closeSession(input.threadId, NEOVIM_TERMINAL_ID, false),
+      );
+    });
+
+  const closeAllNeovim: TerminalManager["Service"]["closeAllNeovim"] = () =>
+    Effect.gen(function* () {
+      const state = yield* readManagerState;
+      const sessions = [...state.sessions.values()].filter((session) => session.kind === "neovim");
+      for (const session of sessions) session.neovimControl?.client.close();
+      yield* Effect.forEach(
+        sessions,
+        (session) =>
+          withThreadLock(
+            session.threadId,
+            closeSession(session.threadId, session.terminalId, false),
+          ),
+        { discard: true },
+      );
+    });
+
   return TerminalManager.of({
     open,
     attachStream,
@@ -3045,6 +3440,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     close,
     subscribe,
     subscribeMetadata,
+    openNeovim,
+    checktimeNeovim,
+    closeNeovim,
+    closeAllNeovim,
   });
 });
 

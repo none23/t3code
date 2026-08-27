@@ -91,6 +91,32 @@ export function createTerminalEnvironmentAtoms<R, E>(
       scheduler: lifecycleScheduler,
       concurrency: lifecycleConcurrency,
     }),
+    openNeovim: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:neovim:open",
+      tag: WS_METHODS.neovimOpen,
+      scheduler: lifecycleScheduler,
+      concurrency: lifecycleConcurrency,
+    }),
+    checktimeNeovim: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:neovim:checktime",
+      tag: WS_METHODS.neovimChecktime,
+      scheduler: lifecycleScheduler,
+      concurrency: lifecycleConcurrency,
+    }),
+    closeNeovim: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:neovim:close",
+      tag: WS_METHODS.neovimClose,
+      scheduler: lifecycleScheduler,
+      // Close must be able to cancel an open or checktime call blocked on a
+      // frozen Neovim RPC connection.
+      concurrency: { mode: "parallel" },
+    }),
+    closeAllNeovim: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:neovim:close-all",
+      tag: WS_METHODS.neovimCloseAll,
+      scheduler: lifecycleScheduler,
+      concurrency: { mode: "serial", key: ({ environmentId }) => environmentId },
+    }),
   };
 }
 

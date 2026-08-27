@@ -153,6 +153,11 @@ import {
   ProjectWriteFileResult,
 } from "./project.ts";
 import {
+  NeovimChecktimeInput,
+  NeovimCloseInput,
+  NeovimCloseAllInput,
+  NeovimError,
+  NeovimOpenInput,
   TerminalAttachInput,
   TerminalAttachStreamEvent,
   TerminalClearInput,
@@ -299,6 +304,10 @@ export const WS_METHODS = {
   terminalClear: "terminal.clear",
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
+  neovimOpen: "neovim.open",
+  neovimChecktime: "neovim.checktime",
+  neovimClose: "neovim.close",
+  neovimCloseAll: "neovim.closeAll",
 
   // Preview methods
   previewOpen: "preview.open",
@@ -1006,7 +1015,28 @@ const WsTerminalCloseRpc = Rpc.make(WS_METHODS.terminalClose, {
   error: Schema.Union([TerminalError, EnvironmentAuthorizationError]),
 });
 
-const WsPreviewOpenRpc = Rpc.make(WS_METHODS.previewOpen, {
+export const WsNeovimOpenRpc = Rpc.make(WS_METHODS.neovimOpen, {
+  payload: NeovimOpenInput,
+  success: TerminalSessionSnapshot,
+  error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
+});
+
+export const WsNeovimChecktimeRpc = Rpc.make(WS_METHODS.neovimChecktime, {
+  payload: NeovimChecktimeInput,
+  error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
+});
+
+export const WsNeovimCloseRpc = Rpc.make(WS_METHODS.neovimClose, {
+  payload: NeovimCloseInput,
+  error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
+});
+
+export const WsNeovimCloseAllRpc = Rpc.make(WS_METHODS.neovimCloseAll, {
+  payload: NeovimCloseAllInput,
+  error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
+});
+
+export const WsPreviewOpenRpc = Rpc.make(WS_METHODS.previewOpen, {
   payload: PreviewOpenInput,
   success: PreviewSessionSnapshot,
   error: Schema.Union([PreviewError, EnvironmentAuthorizationError]),
@@ -1294,6 +1324,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalClearRpc,
   WsTerminalRestartRpc,
   WsTerminalCloseRpc,
+  WsNeovimOpenRpc,
+  WsNeovimChecktimeRpc,
+  WsNeovimCloseRpc,
+  WsNeovimCloseAllRpc,
   WsSubscribeTerminalEventsRpc,
   WsSubscribeTerminalMetadataRpc,
   WsPreviewOpenRpc,

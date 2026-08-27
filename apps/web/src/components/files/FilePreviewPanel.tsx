@@ -39,6 +39,7 @@ import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 import { cn } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { isAbsolutePath, resolvePathLinkTarget } from "~/terminal-links";
+import { resolveWorkspaceRelativePath } from "~/markdown-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Toggle } from "~/components/ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -48,12 +49,15 @@ import { buildFileReviewComment } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
+import { projectEnvironment } from "~/state/projects";
+import { vcsEnvironment } from "~/state/vcs";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { NeovimFileSurface } from "./NeovimFileSurface";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -75,6 +79,7 @@ import {
 import { useFileSaveCoordinator } from "./useFileSaveCoordinator";
 import {
   getOptimisticProjectFileQueryData,
+  refreshProjectFileQueries,
   setProjectFileQueryData,
   useProjectFileQuery,
 } from "./projectFilesQueryState";
@@ -95,6 +100,7 @@ interface FilePreviewPanelProps {
   onPendingChange: (relativePath: string, pending: boolean) => void;
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
+  onNeovimExit?: (unexpected: boolean) => void;
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
@@ -968,9 +974,11 @@ export default function FilePreviewPanel({
   onPendingChange,
   selectedFilePending,
   workspaceMutationId,
+  onNeovimExit,
 }: FilePreviewPanelProps) {
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
+  const neovimEnabled = useClientSettings((settings) => settings.useNeovimForFileEditing);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const remoteOpenState = useRemoteOpenState(environmentId);
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
@@ -978,6 +986,9 @@ export default function FilePreviewPanel({
     reportFailure: false,
   });
   const openPreview = useAtomCommand(previewEnvironment.open, {
+    reportFailure: false,
+  });
+  const refreshVcsStatus = useAtomCommand(vcsEnvironment.refreshStatus, {
     reportFailure: false,
   });
   const isVideo = relativePath !== null && isWorkspaceVideoPreviewPath(relativePath);
@@ -989,11 +1000,13 @@ export default function FilePreviewPanel({
   // A file outside the workspace (an absolute path) is shown, never edited.
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
+  const useNeovim =
+    attachment === undefined && neovimEnabled && !isMedia && !isPdf && !isHostFile;
   const file = useProjectFileQuery(
     environmentId,
     cwd,
     relativePath,
-    attachment === undefined && !isMedia && !isPdf,
+    attachment === undefined && !isMedia && !isPdf && !useNeovim,
   );
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const showExplorer = shouldShowFileExplorer({
@@ -1001,6 +1014,11 @@ export default function FilePreviewPanel({
     explorerOpen,
     attachmentOpen: attachment !== undefined,
   });
+  const [neovimDirty, setNeovimDirty] = useState(false);
+  const [neovimActiveFile, setNeovimActiveFile] = useState<{
+    surfacePath: string | null;
+    relativePath: string;
+  } | null>(null);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(
@@ -1025,9 +1043,10 @@ export default function FilePreviewPanel({
   const revealHandled =
     revealLine === null ||
     (handledReveal?.path === relativePath && handledReveal.requestId === revealRequestId);
-  const renderMarkdown = isMarkdown && renderMarkdownPreferred && revealHandled;
-  const renderBrowserFile = isPdf || (isHtml && renderBrowserFilePreferred && revealHandled);
-  const canToggleRendered = attachment === undefined && (isMarkdown || isHtml);
+  const renderMarkdown = isMarkdown && !useNeovim && renderMarkdownPreferred && revealHandled;
+  const renderBrowserFile =
+    isPdf || (!useNeovim && isHtml && renderBrowserFilePreferred && revealHandled);
+  const canToggleRendered = attachment === undefined && !useNeovim && (isMarkdown || isHtml);
   const rendered = isMarkdown ? renderMarkdown : renderBrowserFile;
   const setRenderedPreferred = isMarkdown
     ? setRenderMarkdownPreferred
@@ -1041,6 +1060,7 @@ export default function FilePreviewPanel({
   const absolutePath =
     relativePath && attachment === undefined ? resolvePathLinkTarget(relativePath, cwd) : null;
   const onFilePostRender = useFileLineReveal(relativePath, revealLine, revealRequestId);
+
   useWorkspaceMutationRefresh({
     enabled:
       attachment === undefined &&
@@ -1052,6 +1072,29 @@ export default function FilePreviewPanel({
     refresh: file.refresh,
     resourceKey: `file:${environmentId}:${cwd}:${relativePath ?? ""}`,
   });
+
+  useEffect(() => {
+    if (!neovimEnabled) setNeovimDirty(false);
+  }, [neovimEnabled]);
+
+  const handleNeovimActiveFileChange = useCallback(
+    (path: string) => {
+      const activeRelativePath = resolveWorkspaceRelativePath(path, cwd);
+      setNeovimActiveFile(
+        activeRelativePath === null
+          ? null
+          : { surfacePath: relativePath, relativePath: activeRelativePath },
+      );
+    },
+    [cwd, relativePath],
+  );
+
+  const handleNeovimWritten = useCallback(() => {
+    void refreshVcsStatus({ environmentId, input: { cwd } });
+    if (!relativePath) return;
+    refreshProjectFileQueries(environmentId, cwd, relativePath);
+    file.refresh();
+  }, [cwd, environmentId, file, refreshVcsStatus, relativePath]);
 
   useEffect(() => {
     const currentCrumb = breadcrumbRef.current?.querySelector<HTMLElement>(
@@ -1144,6 +1187,12 @@ export default function FilePreviewPanel({
               compact
               enableShortcut={false}
             />
+          ) : null}
+          {useNeovim && neovimDirty ? (
+            <Tooltip>
+              <TooltipTrigger render={<span className="text-xs text-warning-foreground">●</span>} />
+              <TooltipPopup>Neovim has unsaved changes</TooltipPopup>
+            </Tooltip>
           ) : null}
           {canToggleRendered ? (
             <Tooltip>
@@ -1247,6 +1296,20 @@ export default function FilePreviewPanel({
               alt={relativePath}
               workspaceMutationId={workspaceMutationId}
             />
+          ) : relativePath && useNeovim && absolutePath ? (
+            <NeovimFileSurface
+              key={`${threadRef.environmentId}:${threadRef.threadId}`}
+              environmentId={environmentId}
+              threadRef={threadRef}
+              cwd={cwd}
+              path={absolutePath}
+              line={revealLine}
+              revealRequestId={revealRequestId}
+              onDirtyChange={setNeovimDirty}
+              onWritten={handleNeovimWritten}
+              onActiveFileChange={handleNeovimActiveFileChange}
+              onExit={(unexpected) => onNeovimExit?.(unexpected)}
+            />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview
               key={absolutePath}
@@ -1342,7 +1405,11 @@ export default function FilePreviewPanel({
               environmentId={environmentId}
               cwd={cwd}
               projectName={projectName}
-              selectedPath={relativePath}
+              selectedPath={
+                useNeovim && neovimActiveFile?.surfacePath === relativePath
+                  ? neovimActiveFile.relativePath
+                  : relativePath
+              }
               selectedPathRevealId={revealRequestId}
               onOpenFile={onOpenFile}
               workspaceMutationId={workspaceMutationId}

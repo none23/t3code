@@ -78,7 +78,11 @@ export function useKnownTerminalSessions(input: {
       return [];
     }
     return (metadata.data ?? [])
-      .filter((summary) => input.threadId === null || summary.threadId === input.threadId)
+      .filter(
+        (summary) =>
+          summary.kind !== "neovim" &&
+          (input.threadId === null || summary.threadId === input.threadId),
+      )
       .map((summary) => ({
         target: {
           environmentId: input.environmentId!,

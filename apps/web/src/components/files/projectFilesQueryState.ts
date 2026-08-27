@@ -119,6 +119,16 @@ export function clearProjectFileQueryData(
   appAtomRegistry.set(optimisticFileAtom(environmentId, cwd, relativePath), null);
 }
 
+export function refreshProjectFileQueries(
+  environmentId: EnvironmentId,
+  cwd: string,
+  relativePath: string,
+): void {
+  clearProjectFileQueryData(environmentId, cwd, relativePath);
+  appAtomRegistry.refresh(getProjectFileQueryAtom(environmentId, cwd, relativePath));
+  appAtomRegistry.refresh(getProjectEntriesQueryAtom(environmentId, cwd));
+}
+
 function errorMessage<A>(result: AsyncResult.AsyncResult<A, unknown>): string | null {
   if (result._tag !== "Failure") return null;
   const cause = Cause.squash(result.cause);

@@ -9,6 +9,7 @@ import {
   resolveInlineCodeFileLinkMeta,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
+  resolveWorkspaceRelativePath,
   rewriteMarkdownFileUriHref,
   shouldOpenMarkdownFileLinkInBrowserByDefault,
   shouldOpenMarkdownFileLinkInEditor,
@@ -21,6 +22,15 @@ describe("isWindowsDrivePathHref", () => {
     ["https://example.com/image.png", false],
   ])("classifies %s as %s", (href, expected) => {
     expect(isWindowsDrivePathHref(href)).toBe(expected);
+  });
+});
+
+describe("resolveWorkspaceRelativePath", () => {
+  it("returns only paths inside the workspace", () => {
+    expect(resolveWorkspaceRelativePath("/repo/project/src/main.ts", "/repo/project")).toBe(
+      "src/main.ts",
+    );
+    expect(resolveWorkspaceRelativePath("/repo/other/main.ts", "/repo/project")).toBeNull();
   });
 });
 
