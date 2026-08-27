@@ -109,6 +109,9 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
         });
         expect(await client.isDirty()).toBe(false);
         await client.checktime();
+        expect(luaSources.at(-1)).toContain('vim.cmd("checktime")');
+        expect(luaSources.at(-1)).toContain("vim.schedule");
+        await client.closeFile("/repo/example.ts");
         expect(methods).toEqual([
           "nvim_get_api_info",
           "nvim_set_client_info",
@@ -117,9 +120,10 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
           "nvim_exec_lua",
           "nvim_exec_lua",
           "nvim_exec_lua",
+          "nvim_exec_lua",
         ]);
-        expect(luaSources.at(-1)).toContain('vim.cmd("checktime")');
-        expect(luaSources.at(-1)).toContain("vim.schedule");
+        expect(luaSources.at(-1)).toContain("vim.api.nvim_buf_delete");
+        expect(luaSources.at(-1)).toContain("force = true");
         await expect(client.request("nvim_unanswered", [], 10)).rejects.toThrow(
           "Neovim RPC request timed out: nvim_unanswered",
         );

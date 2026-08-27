@@ -12,6 +12,7 @@ Neovim activates the matching tab and updates the highlighted file in the file e
 continue to use the built-in preview.
 
 Closing the right panel stops its Neovim process and discards modified buffers.
+Closing an individual file tab deletes its matching Neovim buffer.
 Saving from Neovim refreshes the file view, file index, and source-control status immediately. If
 `nvim` cannot start, the file panel shows the error instead of falling back to the built-in editor.
 
