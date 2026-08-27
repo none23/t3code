@@ -37,6 +37,10 @@ import type {
   ProjectWriteFileResult,
 } from "./project.ts";
 import type {
+  NeovimChecktimeInput,
+  NeovimCloseInput,
+  NeovimCloseAllInput,
+  NeovimOpenInput,
   TerminalAttachInput,
   TerminalAttachStreamEvent,
   TerminalClearInput,
@@ -1311,6 +1315,12 @@ export interface EnvironmentApi {
         onResubscribe?: () => void;
       },
     ) => () => void;
+  };
+  neovim: {
+    open: (input: typeof NeovimOpenInput.Encoded) => Promise<TerminalSessionSnapshot>;
+    checktime: (input: typeof NeovimChecktimeInput.Encoded) => Promise<void>;
+    close: (input: typeof NeovimCloseInput.Encoded) => Promise<void>;
+    closeAll: (input: typeof NeovimCloseAllInput.Encoded) => Promise<void>;
   };
   projects: {
     listEntries: (input: ProjectListEntriesInput) => Promise<ProjectListEntriesResult>;

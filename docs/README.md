@@ -11,6 +11,7 @@
 - [Customize a project icon](./user/project-settings.md)
 - [Mobile appearance](./user/mobile-appearance.md)
 - [Environment themes](./user/environment-theme.md)
+- [Use Neovim for file editing](./user/neovim-file-editing.md)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)

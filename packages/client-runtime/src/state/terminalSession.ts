@@ -30,6 +30,11 @@ export interface TerminalSessionState {
   readonly status: TerminalSessionSnapshot["status"] | "closed";
   readonly error: string | null;
   readonly hasRunningSubprocess: boolean;
+  readonly dirty: boolean;
+  readonly writtenPath: string | null;
+  readonly writtenVersion: number;
+  readonly activeFilePath: string | null;
+  readonly activeFileVersion: number;
   readonly updatedAt: string | null;
   readonly version: number;
   readonly lifecycleVersion: number;
@@ -39,6 +44,11 @@ export interface TerminalBufferState {
   readonly output: TerminalOutputState;
   readonly status: TerminalSessionSnapshot["status"] | "closed";
   readonly error: string | null;
+  readonly dirty: boolean;
+  readonly writtenPath: string | null;
+  readonly writtenVersion: number;
+  readonly activeFilePath: string | null;
+  readonly activeFileVersion: number;
   readonly updatedAt: string | null;
   readonly version: number;
   readonly lifecycleVersion: number;
@@ -59,7 +69,9 @@ export function selectRunningSubprocessTerminalIds(
   sessions: ReadonlyArray<KnownTerminalSession>,
 ): ReadonlyArray<string> {
   return sessions
-    .filter((session) => session.state.hasRunningSubprocess)
+    .filter(
+      (session) => session.state.summary?.kind !== "neovim" && session.state.hasRunningSubprocess,
+    )
     .map((session) => session.target.terminalId);
 }
 
@@ -67,6 +79,11 @@ export const EMPTY_TERMINAL_BUFFER_STATE = Object.freeze<TerminalBufferState>({
   output: EMPTY_TERMINAL_OUTPUT_STATE,
   status: "closed",
   error: null,
+  dirty: false,
+  writtenPath: null,
+  writtenVersion: 0,
+  activeFilePath: null,
+  activeFileVersion: 0,
   updatedAt: null,
   version: 0,
   lifecycleVersion: 0,
@@ -78,6 +95,11 @@ export const EMPTY_TERMINAL_SESSION_STATE = Object.freeze<TerminalSessionState>(
   status: "closed",
   error: null,
   hasRunningSubprocess: false,
+  dirty: false,
+  writtenPath: null,
+  writtenVersion: 0,
+  activeFilePath: null,
+  activeFileVersion: 0,
   updatedAt: null,
   version: 0,
   lifecycleVersion: 0,
@@ -105,6 +127,11 @@ export function terminalBufferStateFromSnapshot(
     output: resetOutput(current.output, snapshot.history, maxBufferBytes),
     status: snapshot.status,
     error: null,
+    dirty: snapshot.dirty ?? false,
+    writtenPath: null,
+    writtenVersion: 0,
+    activeFilePath: null,
+    activeFileVersion: 0,
     updatedAt: snapshot.updatedAt,
     version: current.version + 1,
     lifecycleVersion: current.lifecycleVersion,
@@ -127,6 +154,11 @@ export function combineTerminalSessionState(
     status: buffer.version > 0 ? buffer.status : (summary?.status ?? buffer.status),
     error: buffer.error,
     hasRunningSubprocess: summary?.hasRunningSubprocess ?? false,
+    dirty: buffer.version > 0 ? buffer.dirty : (summary?.dirty ?? false),
+    writtenPath: buffer.writtenPath,
+    writtenVersion: buffer.writtenVersion,
+    activeFilePath: buffer.activeFilePath,
+    activeFileVersion: buffer.activeFileVersion,
     updatedAt: latestTimestamp(summary?.updatedAt ?? null, buffer.updatedAt),
     version: buffer.version,
     lifecycleVersion: buffer.lifecycleVersion,
@@ -188,6 +220,26 @@ export function applyTerminalAttachStreamEvent(
       };
     case "activity":
       return current;
+    case "neovimState":
+      return {
+        ...current,
+        dirty: event.dirty,
+        version: current.version + 1,
+      };
+    case "neovimWritten":
+      return {
+        ...current,
+        writtenPath: event.path,
+        writtenVersion: current.version + 1,
+        version: current.version + 1,
+      };
+    case "neovimActiveFile":
+      return {
+        ...current,
+        activeFilePath: event.path,
+        activeFileVersion: current.activeFileVersion + 1,
+        version: current.version + 1,
+      };
   }
 }
 

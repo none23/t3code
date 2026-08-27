@@ -62,6 +62,10 @@ const makeTerminalManagerLayer = (
     close: () => Effect.void,
     subscribe: () => Effect.succeed(() => undefined),
     subscribeMetadata: () => Effect.succeed(() => undefined),
+    openNeovim: () => Effect.die(new Error("unused")),
+    checktimeNeovim: () => Effect.void,
+    closeNeovim: () => Effect.void,
+    closeAllNeovim: () => Effect.void,
   });
 
 const testLayer = (

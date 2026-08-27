@@ -121,6 +121,18 @@ describe("ClientSettings browser recording frame rate", () => {
   });
 });
 
+describe("ClientSettings Neovim file editing", () => {
+  it("is opt-in and accepts a client-local toggle", () => {
+    expect(decodeClientSettings({}).useNeovimForFileEditing).toBe(false);
+    expect(decodeClientSettings({ useNeovimForFileEditing: true }).useNeovimForFileEditing).toBe(
+      true,
+    );
+    expect(decodeClientSettingsPatch({ useNeovimForFileEditing: true })).toMatchObject({
+      useNeovimForFileEditing: true,
+    });
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

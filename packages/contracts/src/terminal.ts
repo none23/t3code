@@ -7,6 +7,8 @@ import { TrimmedNonEmptyString } from "./baseSchemas.ts";
  * that want "the primary shell" don't hardcode `"term-1"`.
  */
 export const DEFAULT_TERMINAL_ID = "term-1";
+/** Reserved terminal id for the thread-scoped embedded Neovim session. */
+export const NEOVIM_TERMINAL_ID = "t3-neovim";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const TerminalColsSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
@@ -93,11 +95,16 @@ export type TerminalCloseInput = typeof TerminalCloseInput.Type;
 export const TerminalSessionStatus = Schema.Literals(["starting", "running", "exited", "error"]);
 export type TerminalSessionStatus = typeof TerminalSessionStatus.Type;
 
+export const TerminalSessionKind = Schema.Literals(["shell", "neovim"]);
+export type TerminalSessionKind = typeof TerminalSessionKind.Type;
+
 export const TerminalSessionSnapshot = Schema.Struct({
   threadId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  kind: Schema.optional(TerminalSessionKind),
+  dirty: Schema.optional(Schema.Boolean),
   status: TerminalSessionStatus,
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   history: Schema.String,
@@ -115,6 +122,8 @@ export const TerminalSummary = Schema.Struct({
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  kind: Schema.optional(TerminalSessionKind),
+  dirty: Schema.optional(Schema.Boolean),
   status: TerminalSessionStatus,
   pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   exitCode: Schema.NullOr(Schema.Int),
@@ -203,6 +212,24 @@ const TerminalActivityEvent = Schema.Struct({
   label: Schema.String.check(Schema.isMaxLength(128)),
 });
 
+const TerminalNeovimStateEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("neovimState"),
+  dirty: Schema.Boolean,
+});
+
+const TerminalNeovimWrittenEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("neovimWritten"),
+  path: TrimmedNonEmptyStringSchema,
+});
+
+const TerminalNeovimActiveFileEvent = Schema.Struct({
+  ...TerminalEventBaseSchema.fields,
+  type: Schema.Literal("neovimActiveFile"),
+  path: TrimmedNonEmptyStringSchema,
+});
+
 export const TerminalEvent = Schema.Union([
   TerminalStartedEvent,
   TerminalOutputEvent,
@@ -212,6 +239,9 @@ export const TerminalEvent = Schema.Union([
   TerminalClearedEvent,
   TerminalRestartedEvent,
   TerminalActivityEvent,
+  TerminalNeovimStateEvent,
+  TerminalNeovimWrittenEvent,
+  TerminalNeovimActiveFileEvent,
 ]);
 export type TerminalEvent = typeof TerminalEvent.Type;
 
@@ -229,8 +259,54 @@ export const TerminalAttachStreamEvent = Schema.Union([
   TerminalClearedEvent,
   TerminalRestartedEvent,
   TerminalActivityEvent,
+  TerminalNeovimStateEvent,
+  TerminalNeovimWrittenEvent,
+  TerminalNeovimActiveFileEvent,
 ]);
 export type TerminalAttachStreamEvent = typeof TerminalAttachStreamEvent.Type;
+
+export const NeovimOpenInput = Schema.Struct({
+  ...TerminalThreadInput.fields,
+  cwd: TrimmedNonEmptyStringSchema,
+  worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
+  path: TrimmedNonEmptyStringSchema,
+  line: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  column: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  cols: Schema.optional(TerminalColsSchema),
+  rows: Schema.optional(TerminalRowsSchema),
+  env: Schema.optional(TerminalEnvSchema),
+});
+export type NeovimOpenInput = Schema.Codec.Encoded<typeof NeovimOpenInput>;
+
+export const NeovimChecktimeInput = TerminalThreadInput;
+export type NeovimChecktimeInput = typeof NeovimChecktimeInput.Type;
+
+export const NeovimCloseInput = TerminalThreadInput;
+export type NeovimCloseInput = typeof NeovimCloseInput.Type;
+
+export const NeovimCloseAllInput = Schema.Struct({});
+export type NeovimCloseAllInput = typeof NeovimCloseAllInput.Type;
+
+export class NeovimUnavailableError extends Schema.TaggedErrorClass<NeovimUnavailableError>()(
+  "NeovimUnavailableError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class NeovimControlError extends Schema.TaggedErrorClass<NeovimControlError>()(
+  "NeovimControlError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class NeovimFileNotFoundError extends Schema.TaggedErrorClass<NeovimFileNotFoundError>()(
+  "NeovimFileNotFoundError",
+  {
+    path: Schema.String,
+  },
+) {}
 
 export class TerminalCwdNotFoundError extends Schema.TaggedErrorClass<TerminalCwdNotFoundError>()(
   "TerminalCwdNotFoundError",
@@ -350,3 +426,11 @@ export const TerminalError = Schema.Union([
   TerminalResizeError,
 ]);
 export type TerminalError = typeof TerminalError.Type;
+
+export const NeovimError = Schema.Union([
+  NeovimUnavailableError,
+  NeovimControlError,
+  NeovimFileNotFoundError,
+  TerminalError,
+]);
+export type NeovimError = typeof NeovimError.Type;

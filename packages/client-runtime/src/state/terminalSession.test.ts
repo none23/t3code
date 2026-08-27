@@ -491,4 +491,40 @@ describe("terminal session reducers", () => {
       data: writes.slice(100).join(""),
     });
   });
+
+  it("tracks Neovim dirty and write notifications independently of terminal output", () => {
+    const dirty = applyTerminalAttachStreamEvent(EMPTY_TERMINAL_BUFFER_STATE, {
+      type: "neovimState",
+      threadId: TARGET.threadId,
+      terminalId: "t3-neovim",
+      dirty: true,
+    });
+    const written = applyTerminalAttachStreamEvent(dirty, {
+      type: "neovimWritten",
+      threadId: TARGET.threadId,
+      terminalId: "t3-neovim",
+      path: "/repo/example.ts",
+    });
+    const activeFile = applyTerminalAttachStreamEvent(written, {
+      type: "neovimActiveFile",
+      threadId: TARGET.threadId,
+      terminalId: "t3-neovim",
+      path: "/repo/other.ts",
+    });
+    const output = applyTerminalAttachStreamEvent(activeFile, {
+      type: "output",
+      threadId: TARGET.threadId,
+      terminalId: "t3-neovim",
+      data: "redraw",
+    });
+
+    expect(output).toMatchObject({
+      dirty: true,
+      writtenPath: "/repo/example.ts",
+      writtenVersion: 2,
+      activeFilePath: "/repo/other.ts",
+      activeFileVersion: 1,
+      version: 4,
+    });
+  });
 });

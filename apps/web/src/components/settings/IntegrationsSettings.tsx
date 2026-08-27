@@ -44,6 +44,8 @@ import { previewBridge } from "~/components/preview/previewBridge";
 import { cn, randomUUID } from "~/lib/utils";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { isElectron } from "../../env";
+import { terminalEnvironment } from "../../state/terminal";
+import { useAtomCommand } from "../../state/use-atom-command";
 
 import { Badge } from "../ui/badge";
 import {
@@ -582,6 +584,44 @@ function AgentBrowserAccessSetting() {
             updateSettings({ enableAgentBrowserAccess: Boolean(checked) })
           }
           aria-label="Allow agent browser access"
+        />
+      }
+    />
+  );
+}
+
+function NeovimFileEditingSetting() {
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const { environments } = useEnvironments();
+  const closeAllNeovim = useAtomCommand(terminalEnvironment.closeAllNeovim, "neovim close all");
+
+  const setEnabled = (enabled: boolean) => {
+    updateSettings({ useNeovimForFileEditing: enabled });
+    if (!enabled) {
+      for (const environment of environments) {
+        void closeAllNeovim({ environmentId: environment.environmentId, input: {} });
+      }
+    }
+  };
+
+  return (
+    <SettingsRow
+      {...searchableSetting("neovim-file-editing")}
+      description="Open text files from the right panel in your environment's Neovim configuration."
+      resetAction={
+        settings.useNeovimForFileEditing !== DEFAULT_UNIFIED_SETTINGS.useNeovimForFileEditing ? (
+          <SettingResetButton
+            label="Neovim file editing"
+            onClick={() => void setEnabled(DEFAULT_UNIFIED_SETTINGS.useNeovimForFileEditing)}
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={settings.useNeovimForFileEditing}
+          onCheckedChange={(checked) => setEnabled(Boolean(checked))}
+          aria-label="Use Neovim for file editing"
         />
       }
     />
@@ -1202,6 +1242,9 @@ export function IntegrationsSettingsPanel() {
         ) : (
           previewDefaults
         )}
+      </SettingsSection>
+      <SettingsSection title="Editors">
+        <NeovimFileEditingSetting />
       </SettingsSection>
     </SettingsPageContainer>
   );

@@ -96,6 +96,13 @@ export function resolveInlineCodeFileLinkMeta(
   return resolveMarkdownFileLinkMeta(candidate, cwd, baseDir);
 }
 
+export function resolveWorkspaceRelativePath(
+  path: string,
+  workspaceRoot: string | undefined,
+): string | null {
+  return workspaceRelativeFilePath(path, workspaceRoot);
+}
+
 export function resolveMarkdownFileLinkMeta(
   href: string | undefined,
   cwd?: string,

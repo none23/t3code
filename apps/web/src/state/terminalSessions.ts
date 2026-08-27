@@ -67,7 +67,9 @@ function terminalMetadataIndex(metadata: ReadonlyArray<TerminalSummary>): Termin
   let index = metadataIndexes.get(metadata);
   if (!index) {
     const compare = new Intl.Collator(undefined, { numeric: true }).compare;
-    const all = metadata.toSorted((left, right) => compare(left.terminalId, right.terminalId));
+    const all = metadata
+      .filter((summary) => summary.kind !== "neovim")
+      .toSorted((left, right) => compare(left.terminalId, right.terminalId));
     const byThreadId = new Map<string, TerminalSummary[]>();
     for (const summary of all) {
       const group = byThreadId.get(summary.threadId);

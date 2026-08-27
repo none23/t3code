@@ -365,17 +365,18 @@ const CheckpointingLayerLive = Layer.empty.pipe(
 
 const PortScannerLayerLive = PortScanner.layer.pipe(Layer.provide(ProcessRunner.layer));
 
-const TerminalLayerLive = TerminalManager.layer.pipe(
-  Layer.provide(PtyAdapterLive),
-  Layer.provide(PortScannerLayerLive),
-);
-
 const PreviewLayerLive = Layer.empty.pipe(
   Layer.provideMerge(PreviewManager.layer),
   Layer.provideMerge(PortScannerLayerLive),
 );
 
 const WorkspaceEntriesLayerLive = WorkspaceEntries.layer.pipe(Layer.provide(WorkspacePaths.layer));
+
+const TerminalLayerLive = TerminalManager.layer.pipe(
+  Layer.provide(PtyAdapterLive),
+  Layer.provide(PortScannerLayerLive),
+  Layer.provide(WorkspaceEntriesLayerLive),
+);
 
 const WorkspaceFileSystemLayerLive = WorkspaceFileSystem.layer.pipe(
   Layer.provide(WorkspacePaths.layer),

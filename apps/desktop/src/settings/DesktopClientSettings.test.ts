@@ -59,6 +59,7 @@ const clientSettings: ClientSettings = {
   sidebarThreadPreviewCount: 6,
   legacySidebarEnabled: false,
   timestampFormat: "24-hour",
+  useNeovimForFileEditing: true,
   wordWrap: true,
 };
 

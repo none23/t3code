@@ -1383,6 +1383,12 @@ export default function ChatView(props: ChatViewProps) {
   const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, "terminal close");
+  const checktimeNeovim = useAtomCommand(terminalEnvironment.checktimeNeovim, {
+    reportFailure: false,
+  });
+  const closeNeovim = useAtomCommand(terminalEnvironment.closeNeovim, {
+    reportFailure: false,
+  });
   const createThread = useAtomCommand(threadEnvironment.create, { reportFailure: false });
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
@@ -1963,6 +1969,17 @@ export default function ChatView(props: ChatViewProps) {
     });
   }, [activeTerminalDrawerPresence.present, activeThreadKey, existingOpenTerminalThreadKeys]);
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
+  useEffect(() => {
+    if (!settings.useNeovimForFileEditing || !latestTurnSettled || !activeThreadId) return;
+    void checktimeNeovim({ environmentId, input: { threadId: activeThreadId } });
+  }, [
+    activeLatestTurn?.completedAt,
+    activeThreadId,
+    checktimeNeovim,
+    environmentId,
+    latestTurnSettled,
+    settings.useNeovimForFileEditing,
+  ]);
   const activeProjectRef = useMemo(
     () =>
       activeThread ? scopeProjectRef(activeThread.environmentId, activeThread.projectId) : null,
@@ -4004,10 +4021,23 @@ export default function ChatView(props: ChatViewProps) {
     supportsPullRequests,
     threadDetailLoading,
   ]);
+  const stopNeovim = useCallback(() => {
+    if (!activeThreadRef) return;
+    void closeNeovim({
+      environmentId: activeThreadRef.environmentId,
+      input: { threadId: activeThreadRef.threadId },
+    });
+  }, [activeThreadRef, closeNeovim]);
+  const closePreviewPanel = useCallback(() => {
+    if (!activeThreadRef) return;
+    setMaximizedRightPanelThreadKey(null);
+    useRightPanelStore.getState().close(activeThreadRef);
+    stopNeovim();
+  }, [activeThreadRef, stopNeovim]);
   const togglePreviewPanel = useCallback(() => {
     if (!activeThreadRef || !isPreviewSupportedInRuntime()) return;
     if (previewPanelOpen) {
-      useRightPanelStore.getState().close(activeThreadRef);
+      closePreviewPanel();
       return;
     }
     const activeTabId = activePreviewState.activeTabId;
@@ -4016,13 +4046,28 @@ export default function ChatView(props: ChatViewProps) {
     } else {
       createBrowserSurface();
     }
-  }, [activePreviewState.activeTabId, activeThreadRef, createBrowserSurface, previewPanelOpen]);
-  const closePreviewPanel = useCallback(() => {
-    if (activeThreadRef) {
-      setMaximizedRightPanelThreadKey(null);
-      useRightPanelStore.getState().close(activeThreadRef);
-    }
-  }, [activeThreadRef]);
+  }, [
+    activePreviewState.activeTabId,
+    activeThreadRef,
+    closePreviewPanel,
+    createBrowserSurface,
+    previewPanelOpen,
+  ]);
+  const handleNeovimExit = useCallback(
+    (unexpected: boolean) => {
+      if (unexpected) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Neovim exited unexpectedly",
+            description: "The file panel was closed.",
+          }),
+        );
+      }
+      closePreviewPanel();
+    },
+    [closePreviewPanel],
+  );
   const addTerminalSurface = useCallback(() => {
     if (!activeThreadRef || !activeThreadId || !activeProject) return;
     const cwd = gitCwd ?? activeProject.workspaceRoot;
@@ -4243,6 +4288,24 @@ export default function ChatView(props: ChatViewProps) {
     },
     [activeThreadRef, cleanupRightPanelSurfaces, syncActivePreviewSurface],
   );
+  const removingLastFileSurface = useCallback(
+    (removed: readonly RightPanelSurface[]) => {
+      const removedIds = new Set(removed.map((surface) => surface.id));
+      const fileSurfaces = rightPanelState.surfaces.filter(
+        (surface) => surface.kind === "file" || surface.kind === "files",
+      );
+      return fileSurfaces.length > 0 && fileSurfaces.every((surface) => removedIds.has(surface.id));
+    },
+    [rightPanelState.surfaces],
+  );
+  const afterClosingNeovimFor = useCallback(
+    (removed: readonly RightPanelSurface[], finish: () => void) => {
+      const stopAfterClose = removingLastFileSurface(removed);
+      finish();
+      if (stopAfterClose) stopNeovim();
+    },
+    [removingLastFileSurface, stopNeovim],
+  );
   const closeRightPanelSurface = useCallback(
     (surface: RightPanelSurface) => {
       if (!activeThreadRef) return;
@@ -4252,7 +4315,7 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
       if (surface.kind !== "terminal") {
-        finishClose();
+        afterClosingNeovimFor([surface], finishClose);
         return;
       }
       const activeLabel =
@@ -4270,6 +4333,7 @@ export default function ChatView(props: ChatViewProps) {
     [
       activeThreadRef,
       activeTerminalLabelsById,
+      afterClosingNeovimFor,
       closeAfterAgentBrowserConfirmation,
       finishRightPanelSurfaceClose,
     ],
@@ -4278,11 +4342,13 @@ export default function ChatView(props: ChatViewProps) {
     (surface: RightPanelSurface) => {
       if (!activeThreadRef) return;
       const surfaces = rightPanelState.surfaces.filter((entry) => entry.id !== surface.id);
-      const finishClose = () => finishRightPanelSurfaceClose(surfaces);
+      const finishClose = () =>
+        afterClosingNeovimFor(surfaces, () => finishRightPanelSurfaceClose(surfaces));
       closeAfterAgentBrowserConfirmation(surfaces, finishClose);
     },
     [
       activeThreadRef,
+      afterClosingNeovimFor,
       closeAfterAgentBrowserConfirmation,
       finishRightPanelSurfaceClose,
       rightPanelState.surfaces,
@@ -4294,11 +4360,13 @@ export default function ChatView(props: ChatViewProps) {
       const surfaceIndex = rightPanelState.surfaces.findIndex((entry) => entry.id === surface.id);
       if (surfaceIndex < 0) return;
       const surfaces = rightPanelState.surfaces.slice(surfaceIndex + 1);
-      const finishClose = () => finishRightPanelSurfaceClose(surfaces);
+      const finishClose = () =>
+        afterClosingNeovimFor(surfaces, () => finishRightPanelSurfaceClose(surfaces));
       closeAfterAgentBrowserConfirmation(surfaces, finishClose);
     },
     [
       activeThreadRef,
+      afterClosingNeovimFor,
       closeAfterAgentBrowserConfirmation,
       finishRightPanelSurfaceClose,
       rightPanelState.surfaces,
@@ -4306,10 +4374,14 @@ export default function ChatView(props: ChatViewProps) {
   );
   const closeAllRightPanelSurfaces = useCallback(() => {
     if (!activeThreadRef) return;
-    const finishClose = () => finishRightPanelSurfaceClose(rightPanelState.surfaces);
+    const finishClose = () =>
+      afterClosingNeovimFor(rightPanelState.surfaces, () =>
+        finishRightPanelSurfaceClose(rightPanelState.surfaces),
+      );
     closeAfterAgentBrowserConfirmation(rightPanelState.surfaces, finishClose);
   }, [
     activeThreadRef,
+    afterClosingNeovimFor,
     closeAfterAgentBrowserConfirmation,
     finishRightPanelSurfaceClose,
     rightPanelState.surfaces,
@@ -7677,6 +7749,7 @@ export default function ChatView(props: ChatViewProps) {
             pendingFileSurfaceIds.has(renderedRightPanelSurface.id)
           }
           workspaceMutationId={workspaceMutationId}
+          onNeovimExit={handleNeovimExit}
         />
       </Suspense>
     ) : null

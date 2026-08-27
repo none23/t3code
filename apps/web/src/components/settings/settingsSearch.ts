@@ -394,6 +394,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["agent opens browser pop into view hide"],
   },
   {
+    id: "neovim-file-editing",
+    title: "Use Neovim for file editing",
+    to: "/settings/integrations",
+  },
+  {
     id: "source-control",
     title: "Source control",
     to: "/settings/source-control",

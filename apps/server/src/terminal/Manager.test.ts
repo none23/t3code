@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
   DEFAULT_TERMINAL_ID,
+  NEOVIM_TERMINAL_ID,
   type TerminalAttachStreamEvent,
   type TerminalEvent,
   type TerminalMetadataStreamEvent,
@@ -152,7 +153,11 @@ const waitFor = <E, R>(
     Effect.flatMap((result) =>
       Option.match(result, {
         onNone: () =>
-          Effect.fail(new WaitForConditionError({ message: "Timed out waiting for condition" })),
+          Effect.fail(
+            new WaitForConditionError({
+              message: "Timed out waiting for condition",
+            }),
+          ),
         onSome: () => Effect.void,
       }),
     ),
@@ -236,7 +241,9 @@ const createManager = (
   Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3code-terminal-" });
+      const baseDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3code-terminal-",
+      });
       const logsDir = join(baseDir, "userdata", "logs", "terminals");
       const ptyAdapter = options.ptyAdapter ?? new FakePtyAdapter();
 
@@ -620,6 +627,64 @@ it.layer(
     }),
   );
 
+  it.effect("launches Neovim directly and reports a missing executable", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ptyAdapter = new FakePtyAdapter();
+      ptyAdapter.spawnFailures.push(new Error("ENOENT"));
+      const { manager, baseDir } = yield* createManager(5, {
+        ptyAdapter,
+        env: {
+          PATH: "/usr/bin",
+          NVIM: "/tmp/parent-nvim",
+          NVIM_LISTEN_ADDRESS: "legacy",
+        },
+      });
+      const filePath = path.join(baseDir, "example.ts");
+      yield* writeFileString(filePath, "export {};");
+
+      const error = yield* Effect.flip(
+        manager.openNeovim({
+          threadId: "thread-neovim",
+          cwd: baseDir,
+          path: filePath,
+          cols: 90,
+          rows: 28,
+        }),
+      );
+
+      expect(error).toMatchObject({ _tag: "NeovimUnavailableError" });
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+      expect(ptyAdapter.spawnInputs[0]).toMatchObject({
+        shell: "nvim",
+        cwd: baseDir,
+        cols: 90,
+        rows: 28,
+      });
+      expect(ptyAdapter.spawnInputs[0]?.args?.[0]).toBe("--listen");
+      expect(ptyAdapter.spawnInputs[0]?.args).toEqual([
+        "--listen",
+        expect.any(String),
+        "+call cursor(1,1)",
+        "--",
+        filePath,
+      ]);
+      expect(ptyAdapter.spawnInputs[0]?.env.NVIM).toBeUndefined();
+      expect(ptyAdapter.spawnInputs[0]?.env.NVIM_LISTEN_ADDRESS).toBeUndefined();
+
+      const metadata: TerminalMetadataStreamEvent[] = [];
+      const unsubscribe = yield* manager.subscribeMetadata((event) =>
+        Effect.sync(() => metadata.push(event)),
+      );
+      unsubscribe();
+      const terminal = metadata[0]?.type === "snapshot" ? metadata[0].terminals[0] : undefined;
+      expect(terminal).toMatchObject({
+        terminalId: NEOVIM_TERMINAL_ID,
+        kind: "neovim",
+      });
+    }),
+  );
+
   it.effect("forwards write and resize to active pty process", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
@@ -750,8 +815,16 @@ it.layer(
       expect(second).toBeDefined();
       if (!first || !second) return;
 
-      yield* manager.write({ threadId: "thread-1", terminalId: "default", data: "pwd\n" });
-      yield* manager.write({ threadId: "thread-1", terminalId: "term-2", data: "ls\n" });
+      yield* manager.write({
+        threadId: "thread-1",
+        terminalId: "default",
+        data: "pwd\n",
+      });
+      yield* manager.write({
+        threadId: "thread-1",
+        terminalId: "term-2",
+        data: "ls\n",
+      });
 
       expect(first.writes).toEqual(["pwd\n"]);
       expect(second.writes).toEqual(["ls\n"]);
@@ -775,7 +848,10 @@ it.layer(
           Effect.flatMap(pathExists),
         ),
       );
-      yield* manager.clear({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+      yield* manager.clear({
+        threadId: "thread-1",
+        terminalId: DEFAULT_TERMINAL_ID,
+      });
       yield* waitFor(
         historyLogPath(logsDir).pipe(
           Effect.provideService(Path.Path, path),
@@ -1003,7 +1079,11 @@ it.layer(
       yield* manager.open(openInput());
       expect((yield* getEvents).some((event) => event.type === "activity")).toBe(false);
 
-      inspect = { hasRunningSubprocess: true, childCommand: "vim", processIds: [100, 101] };
+      inspect = {
+        hasRunningSubprocess: true,
+        childCommand: "vim",
+        processIds: [100, 101],
+      };
       yield* waitFor(
         Effect.map(getEvents, (events) =>
           events.some(
@@ -1016,7 +1096,11 @@ it.layer(
         "1200 millis",
       );
 
-      inspect = { hasRunningSubprocess: false, childCommand: null, processIds: [] };
+      inspect = {
+        hasRunningSubprocess: false,
+        childCommand: null,
+        processIds: [],
+      };
       yield* waitFor(
         Effect.map(getEvents, (events) =>
           events.some(
@@ -1059,7 +1143,10 @@ it.layer(
 
   it.effect("derives subprocess activity for every terminal from one shared process snapshot", () =>
     Effect.gen(function* () {
-      const runCalls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+      const runCalls: Array<{
+        command: string;
+        args: ReadonlyArray<string>;
+      }> = [];
       // FakePtyAdapter assigns pids starting at 9000, so the two terminals
       // opened below run as pids 9000 and 9001.
       const psStdout = ["  100  9000 vim", "  101   100 git", "  200  9001 /usr/bin/python3"].join(
@@ -1509,7 +1596,9 @@ it.layer(
 
   it.effect("escalates terminal shutdown to SIGKILL when process does not exit in time", () =>
     Effect.gen(function* () {
-      const { manager, ptyAdapter } = yield* createManager(5, { processKillGraceMs: 10 });
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        processKillGraceMs: 10,
+      });
       yield* manager.open(openInput());
       const process = ptyAdapter.processes[0];
       expect(process).toBeDefined();
@@ -1899,7 +1988,10 @@ it.layer(
         "1200 millis",
       );
 
-      yield* manager.close({ threadId: "new-thread", terminalId: DEFAULT_TERMINAL_ID });
+      yield* manager.close({
+        threadId: "new-thread",
+        terminalId: DEFAULT_TERMINAL_ID,
+      });
 
       yield* waitFor(
         Effect.map(Ref.get(metadataEvents), (events) =>
@@ -2043,9 +2135,22 @@ it.layer(
         (event) => event.type === "output" || event.type === "exited",
       );
       expect(relevant).toEqual([
-        expect.objectContaining({ type: "output", data: "first\n", sequence: 2 }),
-        expect.objectContaining({ type: "output", data: "second\n", sequence: 3 }),
-        expect.objectContaining({ type: "exited", exitCode: 0, exitSignal: 0, sequence: 4 }),
+        expect.objectContaining({
+          type: "output",
+          data: "first\n",
+          sequence: 2,
+        }),
+        expect.objectContaining({
+          type: "output",
+          data: "second\n",
+          sequence: 3,
+        }),
+        expect.objectContaining({
+          type: "exited",
+          exitCode: 0,
+          exitSignal: 0,
+          sequence: 4,
+        }),
       ]);
 
       const attachEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
