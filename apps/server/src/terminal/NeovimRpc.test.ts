@@ -1,6 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // @effect-diagnostics globalTimers:off
+import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
+import * as NodePath from "node:path";
 import * as NodeTimers from "node:timers";
 
 import { expect, it } from "@effect/vitest";
@@ -26,6 +28,23 @@ function closeServer(server: NodeNet.Server): Promise<void> {
     server.close((error) => (error ? reject(error) : resolve()));
   });
 }
+
+it.effect("removes the embedded Neovim swap directory during cleanup", () =>
+  Effect.gen(function* () {
+    const platform = yield* HostProcessPlatform;
+    yield* Effect.tryPromise(async () => {
+      const endpoint = await createNeovimRpcEndpoint(platform);
+      const swapFile = NodePath.join(endpoint.swapDirectory, "owned.swp");
+      try {
+        await NodeFSP.writeFile(swapFile, "swap");
+        await endpoint.cleanup();
+        await expect(NodeFSP.access(swapFile)).rejects.toThrow();
+      } finally {
+        await endpoint.cleanup();
+      }
+    });
+  }),
+);
 
 it.effect("decodes Neovim RPC responses split across socket chunks", () =>
   Effect.gen(function* () {
