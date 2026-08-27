@@ -510,6 +510,7 @@ describe("terminal session reducers", () => {
       threadId: TARGET.threadId,
       terminalId: "t3-neovim",
       path: "/repo/other.ts",
+      paths: ["/repo/example.ts", "/repo/other.ts"],
     });
     const output = applyTerminalAttachStreamEvent(activeFile, {
       type: "output",
@@ -523,6 +524,7 @@ describe("terminal session reducers", () => {
       writtenPath: "/repo/example.ts",
       writtenVersion: 2,
       activeFilePath: "/repo/other.ts",
+      filePaths: ["/repo/example.ts", "/repo/other.ts"],
       activeFileVersion: 1,
       version: 4,
     });

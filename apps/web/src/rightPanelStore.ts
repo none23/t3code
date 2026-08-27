@@ -123,6 +123,11 @@ interface RightPanelStoreState {
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   openAttachment: (ref: ScopedThreadRef, attachment: ChatFileAttachment) => void;
+  syncNeovimFiles: (
+    ref: ScopedThreadRef,
+    relativePaths: ReadonlyArray<string>,
+    activeRelativePath: string | null,
+  ) => void;
   openPullRequest: (
     ref: ScopedThreadRef,
     target: {
@@ -526,6 +531,60 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             );
           }),
         ),
+      syncNeovimFiles: (ref, relativePaths, activeRelativePath) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const paths = [...new Set(relativePaths)];
+            if (activeRelativePath !== null && !paths.includes(activeRelativePath)) {
+              paths.push(activeRelativePath);
+            }
+
+            let changed = false;
+            let surfaces = current.surfaces.filter((surface) => {
+              if (surface.kind !== "files") return true;
+              changed = true;
+              return false;
+            });
+            const knownIds = new Set(surfaces.map((surface) => surface.id));
+            for (const path of paths) {
+              const id = `file:${path}` as const;
+              if (knownIds.has(id)) continue;
+              surfaces.push(fileSurface(path, null, 0));
+              knownIds.add(id);
+              changed = true;
+            }
+
+            const activeSurfaceId =
+              activeRelativePath === null ? current.activeSurfaceId : `file:${activeRelativePath}`;
+            if (activeRelativePath !== null) {
+              surfaces = surfaces.map((surface) => {
+                if (
+                  surface.id !== activeSurfaceId ||
+                  surface.kind !== "file" ||
+                  surface.revealLine === null
+                ) {
+                  return surface;
+                }
+                changed = true;
+                return { ...surface, revealLine: null };
+              });
+            }
+
+            if (
+              !changed &&
+              current.activeSurfaceId === activeSurfaceId &&
+              (activeRelativePath === null || current.isOpen)
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              isOpen: activeRelativePath === null ? current.isOpen : true,
+              surfaces,
+              activeSurfaceId,
+            };
+          }),
+        })),
       openTerminal: (ref, terminalId) =>
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) =>

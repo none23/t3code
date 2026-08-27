@@ -97,6 +97,10 @@ interface FilePreviewPanelProps {
   revealLine: number | null;
   revealRequestId: number;
   onOpenFile: (relativePath: string) => void;
+  onNeovimFilesChange: (
+    relativePaths: ReadonlyArray<string>,
+    activeRelativePath: string | null,
+  ) => void;
   onPendingChange: (relativePath: string, pending: boolean) => void;
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
@@ -971,6 +975,7 @@ export default function FilePreviewPanel({
   revealLine,
   revealRequestId,
   onOpenFile,
+  onNeovimFilesChange,
   onPendingChange,
   selectedFilePending,
   workspaceMutationId,
@@ -1015,10 +1020,6 @@ export default function FilePreviewPanel({
     attachmentOpen: attachment !== undefined,
   });
   const [neovimDirty, setNeovimDirty] = useState(false);
-  const [neovimActiveFile, setNeovimActiveFile] = useState<{
-    surfacePath: string | null;
-    relativePath: string;
-  } | null>(null);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(
@@ -1077,16 +1078,20 @@ export default function FilePreviewPanel({
     if (!neovimEnabled) setNeovimDirty(false);
   }, [neovimEnabled]);
 
-  const handleNeovimActiveFileChange = useCallback(
-    (path: string) => {
-      const activeRelativePath = resolveWorkspaceRelativePath(path, cwd);
-      setNeovimActiveFile(
-        activeRelativePath === null
-          ? null
-          : { surfacePath: relativePath, relativePath: activeRelativePath },
-      );
+  const handleNeovimFilesChange = useCallback(
+    (path: string | null, paths: ReadonlyArray<string>) => {
+      const relativePaths = [
+        ...new Set(
+          paths.flatMap((bufferPath) => {
+            const relativePath = resolveWorkspaceRelativePath(bufferPath, cwd);
+            return relativePath === null ? [] : [relativePath];
+          }),
+        ),
+      ];
+      const activeRelativePath = path === null ? null : resolveWorkspaceRelativePath(path, cwd);
+      onNeovimFilesChange(relativePaths, activeRelativePath);
     },
-    [cwd, relativePath],
+    [cwd, onNeovimFilesChange],
   );
 
   const handleNeovimWritten = useCallback(() => {
@@ -1307,7 +1312,7 @@ export default function FilePreviewPanel({
               revealRequestId={revealRequestId}
               onDirtyChange={setNeovimDirty}
               onWritten={handleNeovimWritten}
-              onActiveFileChange={handleNeovimActiveFileChange}
+              onFilesChange={handleNeovimFilesChange}
               onExit={(unexpected) => onNeovimExit?.(unexpected)}
             />
           ) : relativePath && renderBrowserFile && absolutePath ? (
@@ -1405,11 +1410,7 @@ export default function FilePreviewPanel({
               environmentId={environmentId}
               cwd={cwd}
               projectName={projectName}
-              selectedPath={
-                useNeovim && neovimActiveFile?.surfacePath === relativePath
-                  ? neovimActiveFile.relativePath
-                  : relativePath
-              }
+              selectedPath={relativePath}
               selectedPathRevealId={revealRequestId}
               onOpenFile={onOpenFile}
               workspaceMutationId={workspaceMutationId}

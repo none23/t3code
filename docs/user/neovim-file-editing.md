@@ -7,8 +7,9 @@ by each browser or desktop client.
 When enabled, opening a text file from agent output, the file explorer, project search, or a diff
 filename opens your environment's `nvim` executable with your normal configuration and plugins.
 Neovim starts in the thread's worktree root and remains attached to that thread while you switch
-threads or reconnect. Switching buffers inside Neovim also updates the highlighted file in the file
-explorer. Images continue to use the built-in preview.
+threads or reconnect. Each listed file buffer appears as a file tab. Switching buffers inside
+Neovim activates the matching tab and updates the highlighted file in the file explorer. Images
+continue to use the built-in preview.
 
 Closing the right panel stops its Neovim process and discards modified buffers.
 Saving from Neovim refreshes the file view, file index, and source-control status immediately. If

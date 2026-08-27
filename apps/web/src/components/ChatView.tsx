@@ -4160,6 +4160,15 @@ export default function ChatView(props: ChatViewProps) {
     },
     [activeProject, activeThreadRef],
   );
+  const syncNeovimFileSurfaces = useCallback(
+    (relativePaths: ReadonlyArray<string>, activeRelativePath: string | null) => {
+      if (!activeThreadRef || !activeProject) return;
+      useRightPanelStore
+        .getState()
+        .syncNeovimFiles(activeThreadRef, relativePaths, activeRelativePath);
+    },
+    [activeProject, activeThreadRef],
+  );
   // The shell carries server PR updates even while thread detail is still loading.
   const activeThreadMetadata = activeThreadShell ?? activeThread;
   const linkedThreadPullRequest =
@@ -8211,6 +8220,7 @@ export default function ChatView(props: ChatViewProps) {
               : 0
           }
           onOpenFile={openFileSurface}
+          onNeovimFilesChange={syncNeovimFileSurfaces}
           onPendingChange={handleFilePendingChange}
           selectedFilePending={
             renderedRightPanelSurface.kind === "file" &&
