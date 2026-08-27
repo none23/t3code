@@ -620,10 +620,6 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
     [fileMenuActions],
   );
   const handleReturnToThread = useCallback(() => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-      return;
-    }
     if (environmentId !== null && threadId !== null) {
       navigation.dispatch(
         StackActions.replace("Thread", {
@@ -633,6 +629,13 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
       );
     }
   }, [environmentId, navigation, threadId]);
+  const handleBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    handleReturnToThread();
+  }, [handleReturnToThread, navigation]);
 
   if (selectedThread === null || environmentId === null || threadId === null) {
     return <LoadingScreen message="Opening file..." messagePlacement="above-spinner" />;
@@ -674,7 +677,7 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
           <AndroidScreenHeader
             title={basename(relativePath)}
             subtitle={headerSubtitle}
-            onBack={handleReturnToThread}
+            onBack={handleBack}
             trailing={
               <>
                 {fileInspector.supported ? (
