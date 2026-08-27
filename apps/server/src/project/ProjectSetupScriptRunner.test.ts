@@ -64,6 +64,7 @@ const makeTerminalManagerLayer = (
     subscribeMetadata: () => Effect.succeed(() => undefined),
     openNeovim: () => Effect.die(new Error("unused")),
     checktimeNeovim: () => Effect.void,
+    closeFileNeovim: () => Effect.void,
     closeNeovim: () => Effect.void,
     closeAllNeovim: () => Effect.void,
   });

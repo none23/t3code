@@ -438,10 +438,16 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             if (activeRelativePath !== null && !paths.includes(activeRelativePath)) {
               paths.push(activeRelativePath);
             }
+            const pathIds = new Set(paths.map((path) => `file:${path}`));
 
             let changed = false;
             let surfaces = current.surfaces.filter((surface) => {
-              if (surface.kind !== "files") return true;
+              if (
+                surface.kind !== "files" &&
+                (surface.kind !== "file" || pathIds.has(surface.id))
+              ) {
+                return true;
+              }
               changed = true;
               return false;
             });
@@ -454,8 +460,11 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               changed = true;
             }
 
-            const activeSurfaceId =
+            let activeSurfaceId =
               activeRelativePath === null ? current.activeSurfaceId : `file:${activeRelativePath}`;
+            if (!surfaces.some((surface) => surface.id === activeSurfaceId)) {
+              activeSurfaceId = surfaces.at(-1)?.id ?? null;
+            }
             if (activeRelativePath !== null) {
               surfaces = surfaces.map((surface) => {
                 if (

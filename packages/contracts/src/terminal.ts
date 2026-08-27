@@ -282,6 +282,13 @@ export type NeovimOpenInput = Schema.Codec.Encoded<typeof NeovimOpenInput>;
 export const NeovimChecktimeInput = TerminalThreadInput;
 export type NeovimChecktimeInput = typeof NeovimChecktimeInput.Type;
 
+export const NeovimCloseFileInput = Schema.Struct({
+  ...TerminalThreadInput.fields,
+  cwd: TrimmedNonEmptyStringSchema,
+  path: TrimmedNonEmptyStringSchema,
+});
+export type NeovimCloseFileInput = typeof NeovimCloseFileInput.Type;
+
 export const NeovimCloseInput = TerminalThreadInput;
 export type NeovimCloseInput = typeof NeovimCloseInput.Type;
 

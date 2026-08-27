@@ -140,6 +140,17 @@ end)
 return true
 `;
 
+const CLOSE_FILE_LUA = String.raw`
+local path = ...
+for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_buf_get_name(buffer) == path then
+    vim.api.nvim_buf_delete(buffer, { force = true })
+    return true
+  end
+end
+return false
+`;
+
 function rpcError(value: unknown): Error {
   if (value instanceof Error) return value;
   if (Array.isArray(value)) {
@@ -263,6 +274,10 @@ export class NeovimRpcClient {
     // :checktime. Keep that work on Neovim's event loop so it cannot block
     // T3's control channel.
     await this.request("nvim_exec_lua", [CHECKTIME_LUA, []]);
+  }
+
+  async closeFile(path: string): Promise<void> {
+    await this.request("nvim_exec_lua", [CLOSE_FILE_LUA, [path]]);
   }
 
   async isDirty(): Promise<boolean> {

@@ -38,6 +38,7 @@ import type {
 } from "./project.ts";
 import type {
   NeovimChecktimeInput,
+  NeovimCloseFileInput,
   NeovimCloseInput,
   NeovimCloseAllInput,
   NeovimOpenInput,
@@ -1319,6 +1320,7 @@ export interface EnvironmentApi {
   neovim: {
     open: (input: typeof NeovimOpenInput.Encoded) => Promise<TerminalSessionSnapshot>;
     checktime: (input: typeof NeovimChecktimeInput.Encoded) => Promise<void>;
+    closeFile: (input: typeof NeovimCloseFileInput.Encoded) => Promise<void>;
     close: (input: typeof NeovimCloseInput.Encoded) => Promise<void>;
     closeAll: (input: typeof NeovimCloseAllInput.Encoded) => Promise<void>;
   };

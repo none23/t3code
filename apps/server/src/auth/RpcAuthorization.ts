@@ -127,6 +127,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.terminalClose]: AuthTerminalOperateScope,
   [WS_METHODS.neovimOpen]: AuthTerminalOperateScope,
   [WS_METHODS.neovimChecktime]: AuthTerminalOperateScope,
+  [WS_METHODS.neovimCloseFile]: AuthTerminalOperateScope,
   [WS_METHODS.neovimClose]: AuthTerminalOperateScope,
   [WS_METHODS.neovimCloseAll]: AuthTerminalOperateScope,
   [WS_METHODS.subscribeTerminalEvents]: AuthTerminalOperateScope,

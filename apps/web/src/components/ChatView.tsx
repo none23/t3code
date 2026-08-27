@@ -1386,6 +1386,7 @@ export default function ChatView(props: ChatViewProps) {
   const checktimeNeovim = useAtomCommand(terminalEnvironment.checktimeNeovim, {
     reportFailure: false,
   });
+  const closeFileNeovim = useAtomCommand(terminalEnvironment.closeFileNeovim, "neovim close file");
   const closeNeovim = useAtomCommand(terminalEnvironment.closeNeovim, {
     reportFailure: false,
   });
@@ -4310,10 +4311,35 @@ export default function ChatView(props: ChatViewProps) {
   const afterClosingNeovimFor = useCallback(
     (removed: readonly RightPanelSurface[], finish: () => void) => {
       const stopAfterClose = removingLastFileSurface(removed);
+      if (
+        !stopAfterClose &&
+        settings.useNeovimForFileEditing &&
+        activeThreadRef &&
+        activeWorkspaceRoot
+      ) {
+        for (const surface of removed) {
+          if (surface.kind !== "file") continue;
+          void closeFileNeovim({
+            environmentId: activeThreadRef.environmentId,
+            input: {
+              threadId: activeThreadRef.threadId,
+              cwd: activeWorkspaceRoot,
+              path: surface.relativePath,
+            },
+          });
+        }
+      }
       finish();
       if (stopAfterClose) stopNeovim();
     },
-    [removingLastFileSurface, stopNeovim],
+    [
+      activeThreadRef,
+      activeWorkspaceRoot,
+      closeFileNeovim,
+      removingLastFileSurface,
+      settings.useNeovimForFileEditing,
+      stopNeovim,
+    ],
   );
   const closeRightPanelSurface = useCallback(
     (surface: RightPanelSurface) => {

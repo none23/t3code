@@ -36,6 +36,7 @@ import {
   type TerminalSummary,
   type TerminalWriteInput,
   type NeovimChecktimeInput,
+  type NeovimCloseFileInput,
   type NeovimCloseInput,
   type NeovimCloseAllInput,
   type NeovimError,
@@ -225,6 +226,7 @@ export class TerminalManager extends Context.Service<
       input: NeovimOpenInput,
     ) => Effect.Effect<TerminalSessionSnapshot, NeovimError>;
     readonly checktimeNeovim: (input: NeovimChecktimeInput) => Effect.Effect<void, NeovimError>;
+    readonly closeFileNeovim: (input: NeovimCloseFileInput) => Effect.Effect<void, NeovimError>;
     readonly closeNeovim: (input: NeovimCloseInput) => Effect.Effect<void, NeovimError>;
     readonly closeAllNeovim: (input: NeovimCloseAllInput) => Effect.Effect<void, NeovimError>;
   }
@@ -3235,6 +3237,24 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       }),
     );
 
+  const closeFileNeovim: TerminalManager["Service"]["closeFileNeovim"] = (input) =>
+    withThreadLock(
+      input.threadId,
+      Effect.gen(function* () {
+        const session = yield* getSession(input.threadId, NEOVIM_TERMINAL_ID);
+        if (Option.isNone(session) || !session.value.neovimControl) return;
+        const absolutePath = path.resolve(input.cwd, input.path);
+        yield* Effect.tryPromise({
+          try: () => session.value.neovimControl!.client.closeFile(absolutePath),
+          catch: (cause) =>
+            new NeovimControlError({
+              message:
+                cause instanceof Error ? cause.message : "Unable to close the Neovim buffer.",
+            }),
+        });
+      }),
+    );
+
   const closeNeovim: TerminalManager["Service"]["closeNeovim"] = (input) =>
     Effect.gen(function* () {
       const session = yield* getSession(input.threadId, NEOVIM_TERMINAL_ID);
@@ -3277,6 +3297,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     subscribeMetadata,
     openNeovim,
     checktimeNeovim,
+    closeFileNeovim,
     closeNeovim,
     closeAllNeovim,
   });

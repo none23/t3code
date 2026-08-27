@@ -393,6 +393,21 @@ describe("rightPanelStore", () => {
       revealLine: null,
       revealRequestId: 1,
     });
+
+    useRightPanelStore.getState().syncNeovimFiles(refA, ["README.md"], "README.md");
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "file:README.md",
+      surfaces: [
+        {
+          id: "file:README.md",
+          kind: "file",
+          relativePath: "README.md",
+          revealLine: null,
+          revealRequestId: 0,
+        },
+      ],
+    });
   });
 
   it("removes persisted file surfaces when their workspace no longer exists", () => {

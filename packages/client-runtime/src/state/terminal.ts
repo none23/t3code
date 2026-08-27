@@ -103,6 +103,12 @@ export function createTerminalEnvironmentAtoms<R, E>(
       scheduler: lifecycleScheduler,
       concurrency: lifecycleConcurrency,
     }),
+    closeFileNeovim: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:neovim:close-file",
+      tag: WS_METHODS.neovimCloseFile,
+      scheduler: lifecycleScheduler,
+      concurrency: lifecycleConcurrency,
+    }),
     closeNeovim: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:neovim:close",
       tag: WS_METHODS.neovimClose,

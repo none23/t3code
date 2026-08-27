@@ -2547,6 +2547,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.neovimChecktime, terminalManager.checktimeNeovim(input), {
             "rpc.aggregate": "neovim",
           }),
+        [WS_METHODS.neovimCloseFile]: (input) =>
+          observeRpcEffect(WS_METHODS.neovimCloseFile, terminalManager.closeFileNeovim(input), {
+            "rpc.aggregate": "neovim",
+          }),
         [WS_METHODS.neovimClose]: (input) =>
           observeRpcEffect(WS_METHODS.neovimClose, terminalManager.closeNeovim(input), {
             "rpc.aggregate": "neovim",

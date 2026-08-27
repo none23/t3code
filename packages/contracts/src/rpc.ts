@@ -143,6 +143,7 @@ import {
 } from "./project.ts";
 import {
   NeovimChecktimeInput,
+  NeovimCloseFileInput,
   NeovimCloseInput,
   NeovimCloseAllInput,
   NeovimError,
@@ -291,6 +292,7 @@ export const WS_METHODS = {
   terminalClose: "terminal.close",
   neovimOpen: "neovim.open",
   neovimChecktime: "neovim.checktime",
+  neovimCloseFile: "neovim.closeFile",
   neovimClose: "neovim.close",
   neovimCloseAll: "neovim.closeAll",
 
@@ -994,6 +996,11 @@ export const WsNeovimChecktimeRpc = Rpc.make(WS_METHODS.neovimChecktime, {
   error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
 });
 
+export const WsNeovimCloseFileRpc = Rpc.make(WS_METHODS.neovimCloseFile, {
+  payload: NeovimCloseFileInput,
+  error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
+});
+
 export const WsNeovimCloseRpc = Rpc.make(WS_METHODS.neovimClose, {
   payload: NeovimCloseInput,
   error: Schema.Union([NeovimError, EnvironmentAuthorizationError]),
@@ -1298,6 +1305,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalCloseRpc,
   WsNeovimOpenRpc,
   WsNeovimChecktimeRpc,
+  WsNeovimCloseFileRpc,
   WsNeovimCloseRpc,
   WsNeovimCloseAllRpc,
   WsSubscribeTerminalEventsRpc,
