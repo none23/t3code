@@ -1783,6 +1783,9 @@ it.layer(
           PORT: "5173",
           T3CODE_PORT: "3773",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
+          NODE_CHANNEL_FD: "3",
+          NODE_CHANNEL_SERIALIZATION_MODE: "json",
+          WATCH_REPORT_DEPENDENCIES: "1",
           TEST_TERMINAL_KEEP: "keep-me",
         },
       });
@@ -1794,6 +1797,9 @@ it.layer(
       expect(spawnInput.env.PORT).toBeUndefined();
       expect(spawnInput.env.T3CODE_PORT).toBeUndefined();
       expect(spawnInput.env.VITE_DEV_SERVER_URL).toBeUndefined();
+      expect(spawnInput.env.NODE_CHANNEL_FD).toBeUndefined();
+      expect(spawnInput.env.NODE_CHANNEL_SERIALIZATION_MODE).toBeUndefined();
+      expect(spawnInput.env.WATCH_REPORT_DEPENDENCIES).toBeUndefined();
       // Arbitrary host env vars must pass through — terminals inherit the
       // user's environment apart from the explicit blocklist.
       expect(spawnInput.env.TEST_TERMINAL_KEEP).toBe("keep-me");
@@ -1873,6 +1879,7 @@ it.layer(
             T3CODE_PROJECT_ROOT: "/repo",
             T3CODE_WORKTREE_PATH: "/repo/worktree-a",
             CUSTOM_FLAG: "1",
+            NODE_CHANNEL_FD: "7",
           },
         }),
       );
@@ -1883,6 +1890,7 @@ it.layer(
       assert.equal(spawnInput.env.T3CODE_PROJECT_ROOT, "/repo");
       assert.equal(spawnInput.env.T3CODE_WORKTREE_PATH, "/repo/worktree-a");
       assert.equal(spawnInput.env.CUSTOM_FLAG, "1");
+      expect(spawnInput.env.NODE_CHANNEL_FD).toBeUndefined();
     }),
   );
 

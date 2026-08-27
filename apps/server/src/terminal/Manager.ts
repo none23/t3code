@@ -96,7 +96,18 @@ const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
 const NEOVIM_HISTORY_BYTE_LIMIT = 128 * 1024;
-const TERMINAL_ENV_BLOCKLIST = new Set(["PORT", "ELECTRON_RENDERER_PORT", "ELECTRON_RUN_AS_NODE"]);
+const TERMINAL_ENV_BLOCKLIST = new Set([
+  "PORT",
+  "ELECTRON_RENDERER_PORT",
+  "ELECTRON_RUN_AS_NODE",
+  // Vite Plus uses this to make child Node processes report watched files over
+  // IPC. PTY applications own their child IPC protocols, so the extra reports
+  // corrupt tools such as coc-tsserver.
+  "WATCH_REPORT_DEPENDENCIES",
+]);
+// These describe the server's parent IPC channel. Passing them into a PTY makes
+// Node tools inside it attach unrelated file descriptors as if they were IPC.
+const NODE_IPC_ENV_KEYS = new Set(["NODE_CHANNEL_FD", "NODE_CHANNEL_SERIALIZATION_MODE"]);
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const MAX_TERMINAL_LABEL_LENGTH = 128;
 
@@ -1227,6 +1238,9 @@ function toSessionKey(threadId: string, terminalId: string): string {
 
 function shouldExcludeTerminalEnvKey(key: string): boolean {
   const normalizedKey = key.toUpperCase();
+  if (NODE_IPC_ENV_KEYS.has(normalizedKey)) {
+    return true;
+  }
   if (normalizedKey.startsWith("T3CODE_")) {
     return true;
   }
@@ -1304,6 +1318,7 @@ function createTerminalSpawnEnv(
   }
   if (runtimeEnv) {
     for (const [key, value] of Object.entries(runtimeEnv)) {
+      if (NODE_IPC_ENV_KEYS.has(key.toUpperCase())) continue;
       spawnEnv[key] = value;
     }
   }
