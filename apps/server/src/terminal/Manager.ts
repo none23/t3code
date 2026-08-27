@@ -2346,9 +2346,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       ),
     );
 
-    if (startResult._tag === "Success") {
-      return;
-    }
+    if (startResult._tag === "Success") return null;
 
     {
       const error = startResult.failure;
@@ -2392,7 +2390,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
       yield* evictInactiveSessionsIfNeeded();
 
-      const message = error.message;
+      const message = error.cause instanceof Error ? error.cause.message : error.message;
       yield* publishEvent({
         type: "error",
         threadId: session.threadId,
@@ -2406,6 +2404,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         cause: error,
         ...(startedShell ? { shell: startedShell } : {}),
       });
+      return message;
     }
   });
 
@@ -3195,8 +3194,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         }
 
         const startingNeovim = !session.process;
+        let startError: string | null = null;
         if (startingNeovim) {
-          yield* startSession(
+          startError = yield* startSession(
             session,
             {
               threadId: input.threadId,
@@ -3218,7 +3218,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
         if (session.status !== "running" || !session.neovimControl) {
           return yield* new NeovimUnavailableError({
-            message: "Neovim could not be started from the environment PATH.",
+            message:
+              startError === null
+                ? "Neovim stopped before its control channel was ready."
+                : `Neovim failed to start: ${startError}`,
           });
         }
 

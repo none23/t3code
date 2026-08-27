@@ -654,6 +654,7 @@ it.layer(
       );
 
       expect(error).toMatchObject({ _tag: "NeovimUnavailableError" });
+      expect(error.message).toBe("Neovim failed to start: ENOENT");
       expect(ptyAdapter.spawnInputs).toHaveLength(1);
       expect(ptyAdapter.spawnInputs[0]).toMatchObject({
         shell: "nvim",
