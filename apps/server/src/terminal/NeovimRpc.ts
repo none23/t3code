@@ -17,6 +17,7 @@ export interface NeovimRpcNotifications {
 
 export interface NeovimRpcEndpoint {
   readonly address: string;
+  readonly swapDirectory: string;
   readonly cleanup: () => Promise<void>;
 }
 
@@ -222,16 +223,18 @@ async function connectWithRetry(address: string): Promise<NodeNet.Socket> {
 export async function createNeovimRpcEndpoint(
   platform: NodeJS.Platform,
 ): Promise<NeovimRpcEndpoint> {
+  const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-nvim-"));
   if (platform === "win32") {
     return {
       address: `\\\\.\\pipe\\t3-nvim-${NodeCrypto.randomUUID()}`,
-      cleanup: async () => undefined,
+      swapDirectory: directory,
+      cleanup: () => NodeFSP.rm(directory, { recursive: true, force: true }),
     };
   }
 
-  const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-nvim-"));
   return {
     address: NodePath.join(directory, "nvim.sock"),
+    swapDirectory: directory,
     cleanup: () => NodeFSP.rm(directory, { recursive: true, force: true }),
   };
 }

@@ -97,6 +97,9 @@ const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
 const NEOVIM_HISTORY_BYTE_LIMIT = 128 * 1024;
+const NEOVIM_SWAP_DIRECTORY_ENV = "T3_CODE_NVIM_SWAP_DIRECTORY";
+const NEOVIM_SWAP_DIRECTORY_COMMAND =
+  "lua vim.opt.directory = { assert(vim.env.T3_CODE_NVIM_SWAP_DIRECTORY) }";
 const TERMINAL_ENV_BLOCKLIST = new Set([
   "PORT",
   "ELECTRON_RENDERER_PORT",
@@ -1568,8 +1571,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     process: PtyAdapter.PtyProcess,
     threadId: string,
     terminalId: string,
+    afterKill: Effect.Effect<void> = Effect.void,
   ) {
     const fiber = yield* runKillEscalation(process, threadId, terminalId).pipe(
+      Effect.ensuring(afterKill),
       Effect.ensuring(
         modifyManagerState((state) => {
           if (!state.killFibers.has(process)) {
@@ -2044,21 +2049,26 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       return [undefined, state] as const;
     });
 
-    if (neovimControl) {
-      neovimControl.client.close();
-      yield* Effect.tryPromise(() => neovimControl.endpoint.cleanup()).pipe(
-        Effect.ignoreCause({ log: true }),
-      );
-    }
+    neovimControl?.client.close();
+    const cleanupNeovimEndpoint = neovimControl
+      ? Effect.tryPromise(() => neovimControl.endpoint.cleanup()).pipe(
+          Effect.ignoreCause({ log: true }),
+        )
+      : Effect.void;
 
-    if (!process) return;
+    if (!process) return yield* cleanupNeovimEndpoint;
 
     yield* clearKillFiber(process);
     yield* unregisterTerminal({
       threadId: session.threadId,
       terminalId: session.terminalId,
     });
-    yield* startKillEscalation(process, session.threadId, session.terminalId);
+    yield* startKillEscalation(
+      process,
+      session.threadId,
+      session.terminalId,
+      cleanupNeovimEndpoint,
+    );
     yield* evictInactiveSessionsIfNeeded();
   });
 
@@ -2173,9 +2183,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
                     cause,
                   }),
               });
+              terminalEnv[NEOVIM_SWAP_DIRECTORY_ENV] = neovimEndpoint.swapDirectory;
               ptyProcess = yield* options.ptyAdapter.spawn({
                 shell: "nvim",
                 args: [
+                  "--cmd",
+                  NEOVIM_SWAP_DIRECTORY_COMMAND,
                   "--listen",
                   neovimEndpoint.address,
                   ...(initialNeovimFile
@@ -2339,17 +2352,22 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
     {
       const error = startResult.failure;
-      if (ptyProcess) {
-        yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
-      }
       if (session.neovimControl) {
         session.neovimControl.client.close();
         session.neovimControl = null;
       }
-      if (neovimEndpoint) {
-        yield* Effect.tryPromise(() => neovimEndpoint!.cleanup()).pipe(
-          Effect.ignoreCause({ log: true }),
+      const cleanupNeovimEndpoint = neovimEndpoint
+        ? Effect.tryPromise(() => neovimEndpoint!.cleanup()).pipe(Effect.ignoreCause({ log: true }))
+        : Effect.void;
+      if (ptyProcess) {
+        yield* startKillEscalation(
+          ptyProcess,
+          session.threadId,
+          session.terminalId,
+          cleanupNeovimEndpoint,
         );
+      } else {
+        yield* cleanupNeovimEndpoint;
       }
 
       yield* modifyManagerState((state) => {
@@ -2561,15 +2579,17 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session: TerminalSessionState,
       ) {
         cleanupProcessHandles(session);
-        if (session.neovimControl) {
-          session.neovimControl.client.close();
-          yield* Effect.tryPromise(() => session.neovimControl!.endpoint.cleanup()).pipe(
-            Effect.ignoreCause({ log: true }),
-          );
-        }
-        if (!session.process) return;
+        const neovimControl = session.neovimControl;
+        neovimControl?.client.close();
+        const cleanupNeovimEndpoint = neovimControl
+          ? Effect.tryPromise(() => neovimControl.endpoint.cleanup()).pipe(
+              Effect.ignoreCause({ log: true }),
+            )
+          : Effect.void;
+        if (!session.process) return yield* cleanupNeovimEndpoint;
         yield* clearKillFiber(session.process);
         yield* runKillEscalation(session.process, session.threadId, session.terminalId);
+        yield* cleanupNeovimEndpoint;
       });
 
       yield* Effect.forEach(sessions, cleanupSession, {

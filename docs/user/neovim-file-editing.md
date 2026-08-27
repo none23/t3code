@@ -13,6 +13,8 @@ continue to use the built-in preview.
 
 Closing the right panel stops its Neovim process and discards modified buffers.
 Closing an individual file tab deletes its matching Neovim buffer.
+Swap files for the embedded session are isolated in a temporary directory that T3 removes when the
+session stops, so force-closing files or the panel does not leave swap files in the worktree.
 When multiple file buffers are open, `:q` closes the current buffer and its matching tab instead of
 closing the entire panel. Quitting the final file buffer stops the Neovim session normally.
 Saving from Neovim refreshes the file view, file index, and source-control status immediately. If

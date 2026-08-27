@@ -661,8 +661,9 @@ it.layer(
         cols: 90,
         rows: 28,
       });
-      expect(ptyAdapter.spawnInputs[0]?.args?.[0]).toBe("--listen");
       expect(ptyAdapter.spawnInputs[0]?.args).toEqual([
+        "--cmd",
+        "lua vim.opt.directory = { assert(vim.env.T3_CODE_NVIM_SWAP_DIRECTORY) }",
         "--listen",
         expect.any(String),
         "+call cursor(1,1)",
@@ -671,6 +672,9 @@ it.layer(
       ]);
       expect(ptyAdapter.spawnInputs[0]?.env.NVIM).toBeUndefined();
       expect(ptyAdapter.spawnInputs[0]?.env.NVIM_LISTEN_ADDRESS).toBeUndefined();
+      expect(ptyAdapter.spawnInputs[0]?.env.T3_CODE_NVIM_SWAP_DIRECTORY).toEqual(
+        expect.any(String),
+      );
 
       const metadata: TerminalMetadataStreamEvent[] = [];
       const unsubscribe = yield* manager.subscribeMetadata((event) =>
