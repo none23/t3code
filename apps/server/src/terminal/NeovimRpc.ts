@@ -39,15 +39,20 @@ if vim.fn.filereadable(path) ~= 1 then
 end
 
 vim.schedule(function()
-  local ok, err = pcall(vim.api.nvim_cmd, { cmd = "edit", args = { path } }, {})
-  if not ok then
-    if string.find(tostring(err), "E37", 1, true) then
-      vim.api.nvim_cmd({ cmd = "tabedit", args = { path } }, {})
-    else
-      error(err)
+  if vim.api.nvim_buf_get_name(0) ~= path then
+    local ok, err = pcall(vim.api.nvim_cmd, { cmd = "edit", args = { path } }, {})
+    if not ok then
+      if string.find(tostring(err), "E37", 1, true) then
+        vim.api.nvim_cmd({ cmd = "tabedit", args = { path } }, {})
+      else
+        error(err)
+      end
     end
   end
 
+  if line == nil then
+    return
+  end
   local buffer = vim.api.nvim_get_current_buf()
   local last_line = math.max(1, vim.api.nvim_buf_line_count(buffer))
   local target_line = math.min(math.max(1, line), last_line)
@@ -263,10 +268,11 @@ export class NeovimRpcClient {
     throw new Error("Neovim startup timed out before VimEnter.");
   }
 
-  async openFile(path: string, line = 1, column = 1): Promise<void> {
+  async openFile(path: string, line?: number, column = 1): Promise<void> {
     // User autocmds and language servers own the edit lifecycle. Schedule it
     // inside Neovim so their synchronous work cannot exhaust T3's RPC timeout.
-    await this.request("nvim_exec_lua", [OPEN_FILE_LUA, [path, line, column - 1]]);
+    const args = line === undefined ? [path] : [path, line, column - 1];
+    await this.request("nvim_exec_lua", [OPEN_FILE_LUA, args]);
   }
 
   async checktime(): Promise<void> {
