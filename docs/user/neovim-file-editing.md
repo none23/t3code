@@ -13,6 +13,8 @@ continue to use the built-in preview.
 
 Closing the right panel stops its Neovim process and discards modified buffers.
 Closing an individual file tab deletes its matching Neovim buffer.
+When multiple file buffers are open, `:q` closes the current buffer and its matching tab instead of
+closing the entire panel. Quitting the final file buffer stops the Neovim session normally.
 Saving from Neovim refreshes the file view, file index, and source-control status immediately. If
 `nvim` cannot start, the file panel shows the error instead of falling back to the built-in editor.
 
