@@ -3,7 +3,6 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import type { TerminalSessionState } from "@t3tools/client-runtime/state/terminal";
 import { NEOVIM_TERMINAL_ID, type EnvironmentId, type ScopedThreadRef } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
@@ -38,14 +37,12 @@ function NeovimTerminal({
   environmentId,
   threadRef,
   focusRequestId,
-  session,
   onDirtyChange,
   onWritten,
   onFilesChange,
   onExit,
 }: Omit<NeovimFileSurfaceProps, "path" | "line" | "revealRequestId" | "cwd"> & {
   readonly focusRequestId: number;
-  readonly session: TerminalSessionState;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
@@ -79,6 +76,18 @@ function NeovimTerminal({
       terminal: settings.fontSizeTerminal,
     }),
   );
+  const attachInput = useMemo(
+    () => ({ threadId: threadRef.threadId, terminalId: NEOVIM_TERMINAL_ID }),
+    [threadRef.threadId],
+  );
+  const session = useAttachedTerminalSession({
+    environmentId,
+    terminal: attachInput,
+  });
+  // The attach snapshot can arrive while Ghostty is still loading its WASM and fonts.
+  // Creation must replay that newest buffer, not the empty buffer from its first render.
+  const latestBufferRef = useRef(session.buffer);
+  latestBufferRef.current = session.buffer;
   const notifyDirty = useEffectEvent(onDirtyChange);
   const notifyWritten = useEffectEvent(onWritten);
   const notifyFilesChange = useEffectEvent(onFilesChange);
@@ -172,8 +181,9 @@ function NeovimTerminal({
       }
       terminal = created;
       terminalRef.current = created;
-      previousBufferRef.current = session.buffer;
-      if (session.buffer) created.resetAndWrite(session.buffer);
+      const buffer = latestBufferRef.current;
+      previousBufferRef.current = buffer;
+      if (buffer) created.resetAndWrite(buffer);
       created.focus();
     });
     return () => {
@@ -203,30 +213,12 @@ export function NeovimFileSurface(props: NeovimFileSurfaceProps) {
   const open = useAtomCommand(terminalEnvironment.openNeovim, {
     reportFailure: false,
   });
-  const attachInput = useMemo(
-    () => ({ threadId: props.threadRef.threadId, terminalId: NEOVIM_TERMINAL_ID }),
-    [props.threadRef.threadId],
-  );
-  const session = useAttachedTerminalSession({
-    environmentId: props.environmentId,
-    terminal: attachInput,
-  });
   const [ready, setReady] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const [focusRequestId, setFocusRequestId] = useState(0);
   const requestRef = useRef(0);
 
   useEffect(() => {
-    if (
-      props.line === null &&
-      session.status === "running" &&
-      session.activeFilePath === props.path
-    ) {
-      setOpenError(null);
-      setReady(true);
-      setFocusRequestId((current) => current + 1);
-      return;
-    }
     const requestId = ++requestRef.current;
     setOpenError(null);
     void open({
@@ -295,7 +287,6 @@ export function NeovimFileSurface(props: NeovimFileSurfaceProps) {
       environmentId={props.environmentId}
       threadRef={props.threadRef}
       focusRequestId={focusRequestId}
-      session={session}
       onDirtyChange={props.onDirtyChange}
       onWritten={props.onWritten}
       onFilesChange={props.onFilesChange}

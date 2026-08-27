@@ -3205,11 +3205,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         if (!startingNeovim) {
           yield* Effect.tryPromise({
             try: () =>
-              session.neovimControl!.client.openFile(
-                absolutePath,
-                input.line ?? 1,
-                input.column ?? 1,
-              ),
+              session.neovimControl!.client.openFile(absolutePath, input.line, input.column),
             catch: (cause) =>
               new NeovimControlError({
                 message:

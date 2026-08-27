@@ -36,6 +36,7 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
       const unpackr = new Unpackr({ useRecords: false });
       const methods: string[] = [];
       const luaSources: string[] = [];
+      const luaArguments: unknown[][] = [];
       let responseCount = 0;
       let startupChecks = 0;
       let notifyActiveFile:
@@ -60,6 +61,7 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
               const params = message[3];
               if (Array.isArray(params) && typeof params[0] === "string") {
                 luaSources.push(params[0]);
+                luaArguments.push(Array.isArray(params[1]) ? params[1] : []);
               }
             }
             if (method === "nvim_unanswered") continue;
@@ -107,6 +109,10 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
           path: "/repo/example.ts",
           paths: ["/repo/example.ts", "/repo/other.ts"],
         });
+        await client.openFile("/repo/other.ts");
+        expect(luaSources.at(-1)).toContain("vim.api.nvim_buf_get_name(0) ~= path");
+        expect(luaSources.at(-1)).toContain("if line == nil");
+        expect(luaArguments.at(-1)).toEqual(["/repo/other.ts"]);
         expect(await client.isDirty()).toBe(false);
         await client.checktime();
         expect(luaSources.at(-1)).toContain('vim.cmd("checktime")');
@@ -117,6 +123,7 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
           "nvim_set_client_info",
           "nvim_eval",
           "nvim_eval",
+          "nvim_exec_lua",
           "nvim_exec_lua",
           "nvim_exec_lua",
           "nvim_exec_lua",
