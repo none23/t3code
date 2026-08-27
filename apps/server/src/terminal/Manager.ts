@@ -2275,7 +2275,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
                         ),
                       );
                     },
-                    onActiveFile: (activePath) => {
+                    onActiveFile: (activePath, paths) => {
                       runFork(
                         withThreadLock(
                           session.threadId,
@@ -2289,6 +2289,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
                               terminalId: session.terminalId,
                               sequence: stamp.sequence,
                               path: activePath,
+                              paths,
                             });
                           }),
                         ),

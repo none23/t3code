@@ -38,8 +38,13 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
       const luaSources: string[] = [];
       let responseCount = 0;
       let startupChecks = 0;
-      let notifyActiveFile: ((path: string) => void) | undefined;
-      const activeFile = new Promise<string>((resolve) => {
+      let notifyActiveFile:
+        | ((value: { path: string | null; paths: ReadonlyArray<string> }) => void)
+        | undefined;
+      const activeFile = new Promise<{
+        path: string | null;
+        paths: ReadonlyArray<string>;
+      }>((resolve) => {
         notifyActiveFile = resolve;
       });
 
@@ -78,7 +83,13 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
               method === "nvim_exec_lua" &&
               methods.filter((entry) => entry === method).length === 1
             ) {
-              socket.write(packr.pack([2, "t3_active_file", ["/repo/example.ts"]]));
+              socket.write(
+                packr.pack([
+                  2,
+                  "t3_active_file",
+                  ["/repo/example.ts", ["/repo/example.ts", "/repo/other.ts"]],
+                ]),
+              );
             }
           }
         });
@@ -90,9 +101,12 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
         client = await NeovimRpcClient.connect(endpoint.address, {
           onDirty: () => undefined,
           onWritten: () => undefined,
-          onActiveFile: (path) => notifyActiveFile?.(path),
+          onActiveFile: (path, paths) => notifyActiveFile?.({ path, paths }),
         });
-        expect(await activeFile).toBe("/repo/example.ts");
+        expect(await activeFile).toEqual({
+          path: "/repo/example.ts",
+          paths: ["/repo/example.ts", "/repo/other.ts"],
+        });
         expect(await client.isDirty()).toBe(false);
         await client.checktime();
         expect(methods).toEqual([

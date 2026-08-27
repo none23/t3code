@@ -3755,6 +3755,15 @@ export default function ChatView(props: ChatViewProps) {
     },
     [activeProject, activeThreadRef],
   );
+  const syncNeovimFileSurfaces = useCallback(
+    (relativePaths: ReadonlyArray<string>, activeRelativePath: string | null) => {
+      if (!activeThreadRef || !activeProject) return;
+      useRightPanelStore
+        .getState()
+        .syncNeovimFiles(activeThreadRef, relativePaths, activeRelativePath);
+    },
+    [activeProject, activeThreadRef],
+  );
   // The thread's own change request, placed against the project it belongs to. Without a
   // project there is nothing to resolve it against, so the caller falls back to the browser.
   const persistedLinkedThreadPullRequest = isServerThread
@@ -7743,6 +7752,7 @@ export default function ChatView(props: ChatViewProps) {
               : 0
           }
           onOpenFile={openFileSurface}
+          onNeovimFilesChange={syncNeovimFileSurfaces}
           onPendingChange={handleFilePendingChange}
           selectedFilePending={
             renderedRightPanelSurface.kind === "file" &&

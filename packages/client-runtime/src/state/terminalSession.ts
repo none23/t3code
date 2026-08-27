@@ -34,6 +34,7 @@ export interface TerminalSessionState {
   readonly writtenPath: string | null;
   readonly writtenVersion: number;
   readonly activeFilePath: string | null;
+  readonly filePaths: ReadonlyArray<string>;
   readonly activeFileVersion: number;
   readonly updatedAt: string | null;
   readonly version: number;
@@ -48,6 +49,7 @@ export interface TerminalBufferState {
   readonly writtenPath: string | null;
   readonly writtenVersion: number;
   readonly activeFilePath: string | null;
+  readonly filePaths: ReadonlyArray<string>;
   readonly activeFileVersion: number;
   readonly updatedAt: string | null;
   readonly version: number;
@@ -83,6 +85,7 @@ export const EMPTY_TERMINAL_BUFFER_STATE = Object.freeze<TerminalBufferState>({
   writtenPath: null,
   writtenVersion: 0,
   activeFilePath: null,
+  filePaths: [],
   activeFileVersion: 0,
   updatedAt: null,
   version: 0,
@@ -99,6 +102,7 @@ export const EMPTY_TERMINAL_SESSION_STATE = Object.freeze<TerminalSessionState>(
   writtenPath: null,
   writtenVersion: 0,
   activeFilePath: null,
+  filePaths: [],
   activeFileVersion: 0,
   updatedAt: null,
   version: 0,
@@ -131,6 +135,7 @@ export function terminalBufferStateFromSnapshot(
     writtenPath: null,
     writtenVersion: 0,
     activeFilePath: null,
+    filePaths: [],
     activeFileVersion: 0,
     updatedAt: snapshot.updatedAt,
     version: current.version + 1,
@@ -158,6 +163,7 @@ export function combineTerminalSessionState(
     writtenPath: buffer.writtenPath,
     writtenVersion: buffer.writtenVersion,
     activeFilePath: buffer.activeFilePath,
+    filePaths: buffer.filePaths,
     activeFileVersion: buffer.activeFileVersion,
     updatedAt: latestTimestamp(summary?.updatedAt ?? null, buffer.updatedAt),
     version: buffer.version,
@@ -237,6 +243,7 @@ export function applyTerminalAttachStreamEvent(
       return {
         ...current,
         activeFilePath: event.path,
+        filePaths: event.paths,
         activeFileVersion: current.activeFileVersion + 1,
         version: current.version + 1,
       };

@@ -358,6 +358,43 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("adds Neovim buffers as file surfaces and activates the current buffer", () => {
+    useRightPanelStore.getState().openFile(refA, "src/index.ts", 42);
+    useRightPanelStore.getState().syncNeovimFiles(refA, ["src/index.ts", "README.md"], "README.md");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "file:README.md",
+      surfaces: [
+        {
+          id: "file:src/index.ts",
+          kind: "file",
+          relativePath: "src/index.ts",
+          revealLine: 42,
+          revealRequestId: 1,
+        },
+        {
+          id: "file:README.md",
+          kind: "file",
+          relativePath: "README.md",
+          revealLine: null,
+          revealRequestId: 0,
+        },
+      ],
+    });
+
+    useRightPanelStore
+      .getState()
+      .syncNeovimFiles(refA, ["src/index.ts", "README.md"], "src/index.ts");
+
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state.activeSurfaceId).toBe("file:src/index.ts");
+    expect(state.surfaces[0]).toMatchObject({
+      revealLine: null,
+      revealRequestId: 1,
+    });
+  });
+
   it("removes persisted file surfaces when their workspace no longer exists", () => {
     useRightPanelStore.getState().openFile(refA, "src/index.ts");
     useRightPanelStore.getState().open(refA, "agents");

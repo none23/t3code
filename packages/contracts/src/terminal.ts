@@ -227,7 +227,8 @@ const TerminalNeovimWrittenEvent = Schema.Struct({
 const TerminalNeovimActiveFileEvent = Schema.Struct({
   ...TerminalEventBaseSchema.fields,
   type: Schema.Literal("neovimActiveFile"),
-  path: TrimmedNonEmptyStringSchema,
+  path: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  paths: Schema.Array(TrimmedNonEmptyStringSchema),
 });
 
 export const TerminalEvent = Schema.Union([

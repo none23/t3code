@@ -12,7 +12,7 @@ import { Packr, Unpackr } from "msgpackr";
 export interface NeovimRpcNotifications {
   readonly onDirty: (dirty: boolean) => void;
   readonly onWritten: (path: string) => void;
-  readonly onActiveFile: (path: string) => void;
+  readonly onActiveFile: (path: string | null, paths: ReadonlyArray<string>) => void;
 }
 
 export interface NeovimRpcEndpoint {
@@ -78,10 +78,23 @@ local function notify_dirty()
 end
 
 local function notify_active_file()
-  local path = vim.api.nvim_buf_get_name(0)
-  if path ~= "" then
-    vim.rpcnotify(channel, "t3_active_file", path)
+  local active_path = vim.api.nvim_buf_get_name(0)
+  local paths = {}
+  local seen = {}
+  for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+    if
+      vim.api.nvim_buf_is_valid(buffer)
+      and vim.bo[buffer].buflisted
+      and vim.bo[buffer].buftype == ""
+    then
+      local path = vim.api.nvim_buf_get_name(buffer)
+      if path ~= "" and not seen[path] then
+        seen[path] = true
+        table.insert(paths, path)
+      end
+    end
   end
+  vim.rpcnotify(channel, "t3_active_file", active_path ~= "" and active_path or vim.NIL, paths)
 end
 
 vim.api.nvim_create_autocmd({ "BufModifiedSet", "BufAdd", "BufDelete", "BufWipeout" }, {
@@ -99,7 +112,7 @@ vim.api.nvim_create_autocmd("BufWritePost", {
   end,
 })
 
-vim.api.nvim_create_autocmd("BufEnter", {
+vim.api.nvim_create_autocmd({ "BufAdd", "BufDelete", "BufWipeout", "BufEnter" }, {
   group = group,
   callback = function()
     vim.schedule(notify_active_file)
@@ -318,8 +331,13 @@ export class NeovimRpcClient {
             this.#notifications.onDirty(params[0]);
           } else if (message[1] === "t3_written" && typeof params[0] === "string") {
             this.#notifications.onWritten(params[0]);
-          } else if (message[1] === "t3_active_file" && typeof params[0] === "string") {
-            this.#notifications.onActiveFile(params[0]);
+          } else if (
+            message[1] === "t3_active_file" &&
+            (params[0] === null || typeof params[0] === "string") &&
+            Array.isArray(params[1]) &&
+            params[1].every((path) => typeof path === "string")
+          ) {
+            this.#notifications.onActiveFile(params[0], params[1]);
           }
         }
       }
