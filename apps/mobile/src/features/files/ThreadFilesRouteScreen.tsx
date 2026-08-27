@@ -552,57 +552,56 @@ export function ThreadFileScreen(props: ThreadFileRouteScreenProps) {
   );
   useRegisterWorkspaceInspector(fileInspector.supported ? renderWorkspaceInspector : undefined);
 
-  const fileMenuActions = useMemo(
-    () =>
-      [
-        relativePath !== null && canPreview && !isImageFile
-          ? ({
-              id: "preview",
-              title: "Preview",
-              icon: "eye",
-              inline: true,
-              onPress: () => setModeOverride({ path: relativePath, mode: "preview" }),
-            } as const)
-          : null,
-        relativePath !== null && canPreview && !isImageFile
-          ? ({
-              id: "source",
-              title: "Source",
-              icon: "doc.text",
-              inline: true,
-              onPress: () => setModeOverride({ path: relativePath, mode: "source" }),
-            } as const)
-          : null,
-        relativePath !== null
-          ? ({
-              id: "copy-path",
-              title: "Copy path",
-              icon: "doc.on.doc",
-              inline: false,
-              onPress: () => copyTextWithHaptic(relativePath),
-            } as const)
-          : null,
-        relativePath !== null && isBrowserFile && typeof assetPreviewUri === "string"
-          ? ({
-              id: "open-browser",
-              title: Platform.OS === "ios" ? "Open in Safari" : "Open in browser",
-              icon: "safari",
-              inline: false,
-              onPress: () => tryOpenExternalUrl(assetPreviewUri, "file-preview"),
-            } as const)
-          : null,
-        relativePath !== null && resolvedActiveMode === "preview" && (isBrowserFile || isImageFile)
-          ? ({
-              id: "refresh",
-              title: "Refresh",
-              icon: "arrow.clockwise",
-              inline: false,
-              onPress: () => setPreviewRevision((current) => current + 1),
-            } as const)
-          : null,
-      ].filter((action) => action !== null),
-    [assetPreviewUri, canPreview, isBrowserFile, isImageFile, relativePath, resolvedActiveMode],
-  );
+  const fileMenuActions = useMemo(() => {
+    if (relativePath === null) return [];
+    const canToggleMode = canPreview && !isImageFile;
+    return [
+      canToggleMode
+        ? ({
+            id: "preview",
+            title: "Preview",
+            icon: "eye",
+            inline: true,
+            onPress: () => setModeOverride({ path: relativePath, mode: "preview" }),
+          } as const)
+        : null,
+      canToggleMode
+        ? ({
+            id: "source",
+            title: "Source",
+            icon: "doc.text",
+            inline: true,
+            onPress: () => setModeOverride({ path: relativePath, mode: "source" }),
+          } as const)
+        : null,
+      {
+        id: "copy-path",
+        title: "Copy path",
+        icon: "doc.on.doc",
+        inline: false,
+        onPress: () => copyTextWithHaptic(relativePath),
+      } as const,
+      isBrowserFile && typeof assetPreviewUri === "string"
+        ? ({
+            id: "open-browser",
+            title: Platform.OS === "ios" ? "Open in Safari" : "Open in browser",
+            icon: "safari",
+            inline: false,
+            onPress: () => tryOpenExternalUrl(assetPreviewUri, "file-preview"),
+          } as const)
+        : null,
+      resolvedActiveMode === "preview" && (isBrowserFile || isImageFile)
+        ? ({
+            id: "refresh",
+            title: "Refresh",
+            icon: "arrow.clockwise",
+            inline: false,
+            onPress: () => setPreviewRevision((current) => current + 1),
+          } as const)
+        : null,
+    ].filter((action) => action !== null);
+  }, [assetPreviewUri, canPreview, isBrowserFile, isImageFile, relativePath, resolvedActiveMode]);
+
   const androidFileMenuActions = useMemo<MenuAction[]>(
     () =>
       fileMenuActions.map((action) => ({
