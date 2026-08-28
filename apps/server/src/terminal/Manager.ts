@@ -1342,6 +1342,56 @@ function normalizedRuntimeEnv(
   return Object.fromEntries(entries.toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
+/** Fresh mutable session state; callers register it in the manager map and start the PTY. */
+function createSessionState(input: {
+  readonly threadId: string;
+  readonly terminalId: string;
+  readonly cwd: string;
+  readonly worktreePath: string | null;
+  readonly kind: TerminalSessionKind;
+  readonly history: BoundedTerminalHistory;
+  readonly cols: number;
+  readonly rows: number;
+  readonly env: Record<string, string> | undefined;
+  readonly updatedAt: string;
+}): TerminalSessionState {
+  return {
+    threadId: input.threadId,
+    terminalId: input.terminalId,
+    cwd: input.cwd,
+    worktreePath: input.worktreePath,
+    kind: input.kind,
+    dirty: false,
+    status: "starting",
+    pid: null,
+    history: input.history,
+    pendingHistoryControlSequence: "",
+    pendingProcessEvents: [],
+    pendingProcessEventIndex: 0,
+    processEventDrainRunning: false,
+    exitCode: null,
+    exitSignal: null,
+    updatedAt: input.updatedAt,
+    eventSequence: 0,
+    cols: input.cols,
+    rows: input.rows,
+    process: null,
+    unsubscribeData: null,
+    unsubscribeExit: null,
+    hasRunningSubprocess: false,
+    childCommandLabel: null,
+    runtimeEnv: normalizedRuntimeEnv(input.env),
+    neovimControl: null,
+  };
+}
+
+/** Best-effort removal of a Neovim RPC endpoint's socket and swap directory. */
+function cleanupNeovimEndpoint(endpoint: NeovimRpcEndpoint | null | undefined) {
+  return endpoint
+    ? Effect.tryPromise(() => endpoint.cleanup()).pipe(Effect.ignoreCause({ log: true }))
+    : Effect.void;
+}
+
 interface TerminalManagerOptions {
   logsDir: string;
   historyLineLimit?: number;
@@ -2008,9 +2058,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       yield* clearKillFiber(action.process);
       if (action.neovimControl) {
         action.neovimControl.client.close();
-        yield* Effect.tryPromise(() => action.neovimControl!.endpoint.cleanup()).pipe(
-          Effect.ignoreCause({ log: true }),
-        );
+        yield* cleanupNeovimEndpoint(action.neovimControl.endpoint);
       }
       yield* unregisterTerminal({
         threadId: action.threadId,
@@ -2053,25 +2101,16 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     });
 
     neovimControl?.client.close();
-    const cleanupNeovimEndpoint = neovimControl
-      ? Effect.tryPromise(() => neovimControl.endpoint.cleanup()).pipe(
-          Effect.ignoreCause({ log: true }),
-        )
-      : Effect.void;
+    const cleanupEndpoint = cleanupNeovimEndpoint(neovimControl?.endpoint);
 
-    if (!process) return yield* cleanupNeovimEndpoint;
+    if (!process) return yield* cleanupEndpoint;
 
     yield* clearKillFiber(process);
     yield* unregisterTerminal({
       threadId: session.threadId,
       terminalId: session.terminalId,
     });
-    yield* startKillEscalation(
-      process,
-      session.threadId,
-      session.terminalId,
-      cleanupNeovimEndpoint,
-    );
+    yield* startKillEscalation(process, session.threadId, session.terminalId, cleanupEndpoint);
     yield* evictInactiveSessionsIfNeeded();
   });
 
@@ -2366,18 +2405,16 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session.neovimControl.client.close();
         session.neovimControl = null;
       }
-      const cleanupNeovimEndpoint = neovimEndpoint
-        ? Effect.tryPromise(() => neovimEndpoint!.cleanup()).pipe(Effect.ignoreCause({ log: true }))
-        : Effect.void;
+      const cleanupEndpoint = cleanupNeovimEndpoint(neovimEndpoint);
       if (ptyProcess) {
         yield* startKillEscalation(
           ptyProcess,
           session.threadId,
           session.terminalId,
-          cleanupNeovimEndpoint,
+          cleanupEndpoint,
         );
       } else {
-        yield* cleanupNeovimEndpoint;
+        yield* cleanupEndpoint;
       }
 
       yield* modifyManagerState((state) => {
@@ -2590,17 +2627,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         session: TerminalSessionState,
       ) {
         cleanupProcessHandles(session);
-        const neovimControl = session.neovimControl;
-        neovimControl?.client.close();
-        const cleanupNeovimEndpoint = neovimControl
-          ? Effect.tryPromise(() => neovimControl.endpoint.cleanup()).pipe(
-              Effect.ignoreCause({ log: true }),
-            )
-          : Effect.void;
-        if (!session.process) return yield* cleanupNeovimEndpoint;
+        session.neovimControl?.client.close();
+        const cleanupEndpoint = cleanupNeovimEndpoint(session.neovimControl?.endpoint);
+        if (!session.process) return yield* cleanupEndpoint;
         yield* clearKillFiber(session.process);
         yield* runKillEscalation(session.process, session.threadId, session.terminalId);
-        yield* cleanupNeovimEndpoint;
+        yield* cleanupEndpoint;
       });
 
       yield* Effect.forEach(sessions, cleanupSession, {
@@ -2625,34 +2657,18 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       const history = yield* readHistory(input.threadId, terminalId);
       const cols = input.cols ?? DEFAULT_OPEN_COLS;
       const rows = input.rows ?? DEFAULT_OPEN_ROWS;
-      const session: TerminalSessionState = {
+      const session = createSessionState({
         threadId: input.threadId,
         terminalId,
         cwd: input.cwd,
         worktreePath: input.worktreePath ?? null,
         kind: "shell",
-        dirty: false,
-        status: "starting",
-        pid: null,
         history,
-        pendingHistoryControlSequence: "",
-        pendingProcessEvents: [],
-        pendingProcessEventIndex: 0,
-        processEventDrainRunning: false,
-        exitCode: null,
-        exitSignal: null,
-        updatedAt: yield* nowIso,
-        eventSequence: 0,
         cols,
         rows,
-        process: null,
-        unsubscribeData: null,
-        unsubscribeExit: null,
-        hasRunningSubprocess: false,
-        childCommandLabel: null,
-        runtimeEnv: normalizedRuntimeEnv(input.env),
-        neovimControl: null,
-      };
+        env: input.env,
+        updatedAt: yield* nowIso,
+      });
 
       const createdSession = session;
       yield* modifyManagerState((state) => {
@@ -3044,34 +3060,18 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         if (Option.isNone(existingSession)) {
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
           const rows = input.rows ?? DEFAULT_OPEN_ROWS;
-          session = {
+          session = createSessionState({
             threadId: input.threadId,
             terminalId,
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             kind: "shell",
-            dirty: false,
-            status: "starting",
-            pid: null,
             history: new BoundedTerminalHistory(historyLineLimit, "", historyByteLimit),
-            pendingHistoryControlSequence: "",
-            pendingProcessEvents: [],
-            pendingProcessEventIndex: 0,
-            processEventDrainRunning: false,
-            exitCode: null,
-            exitSignal: null,
-            updatedAt: yield* nowIso,
-            eventSequence: 0,
             cols,
             rows,
-            process: null,
-            unsubscribeData: null,
-            unsubscribeExit: null,
-            hasRunningSubprocess: false,
-            childCommandLabel: null,
-            runtimeEnv: normalizedRuntimeEnv(input.env),
-            neovimControl: null,
-          };
+            env: input.env,
+            updatedAt: yield* nowIso,
+          });
           const createdSession = session;
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
@@ -3152,38 +3152,22 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         if (Option.isNone(existing)) {
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
           const rows = input.rows ?? DEFAULT_OPEN_ROWS;
-          session = {
+          session = createSessionState({
             threadId: input.threadId,
             terminalId: NEOVIM_TERMINAL_ID,
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             kind: "neovim",
-            dirty: false,
-            status: "starting",
-            pid: null,
             history: new BoundedTerminalHistory(
               historyLineLimit,
               "",
               NEOVIM_HISTORY_BYTE_LIMIT,
             ),
-            pendingHistoryControlSequence: "",
-            pendingProcessEvents: [],
-            pendingProcessEventIndex: 0,
-            processEventDrainRunning: false,
-            exitCode: null,
-            exitSignal: null,
-            updatedAt: yield* nowIso,
-            eventSequence: 0,
             cols,
             rows,
-            process: null,
-            unsubscribeData: null,
-            unsubscribeExit: null,
-            hasRunningSubprocess: false,
-            childCommandLabel: null,
-            runtimeEnv: normalizedRuntimeEnv(input.env),
-            neovimControl: null,
-          };
+            env: input.env,
+            updatedAt: yield* nowIso,
+          });
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
             sessions.set(toSessionKey(input.threadId, NEOVIM_TERMINAL_ID), session);
@@ -3207,7 +3191,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             session.cwd = input.cwd;
             session.worktreePath = nextWorktreePath;
             session.runtimeEnv = nextRuntimeEnv;
-            session.history = "";
+            session.history.clear();
           }
           session.cols = input.cols ?? session.cols;
           session.rows = input.rows ?? session.rows;
