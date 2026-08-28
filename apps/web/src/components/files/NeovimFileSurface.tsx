@@ -48,8 +48,6 @@ function NeovimTerminal({
   const terminalRef = useRef<GhosttyTerminalSurface | null>(null);
   const previousBufferRef = useRef("");
   const handledExitRef = useRef(false);
-  const handledWrittenVersionRef = useRef(0);
-  const handledActiveFileVersionRef = useRef(0);
   const write = useAtomCommand(terminalEnvironment.write, {
     reportFailure: false,
   });
@@ -88,6 +86,10 @@ function NeovimTerminal({
   // Creation must replay that newest buffer, not the empty buffer from its first render.
   const latestBufferRef = useRef(session.buffer);
   latestBufferRef.current = session.buffer;
+  // Start from the session's current versions so a remount does not replay
+  // write/file notifications that were already handled.
+  const handledWrittenVersionRef = useRef(session.writtenVersion);
+  const handledActiveFileVersionRef = useRef(session.activeFileVersion);
   const notifyDirty = useEffectEvent(onDirtyChange);
   const notifyWritten = useEffectEvent(onWritten);
   const notifyFilesChange = useEffectEvent(onFilesChange);

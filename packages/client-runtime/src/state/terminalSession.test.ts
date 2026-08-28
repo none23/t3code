@@ -522,11 +522,34 @@ describe("terminal session reducers", () => {
     expect(output).toMatchObject({
       dirty: true,
       writtenPath: "/repo/example.ts",
-      writtenVersion: 2,
+      writtenVersion: 1,
       activeFilePath: "/repo/other.ts",
       filePaths: ["/repo/example.ts", "/repo/other.ts"],
       activeFileVersion: 1,
       version: 4,
+    });
+  });
+
+  it("uses the server event sequence for write and active-file versions", () => {
+    const written = applyTerminalAttachStreamEvent(EMPTY_TERMINAL_BUFFER_STATE, {
+      type: "neovimWritten",
+      threadId: TARGET.threadId,
+      terminalId: "t3-neovim",
+      sequence: 41,
+      path: "/repo/example.ts",
+    });
+    const activeFile = applyTerminalAttachStreamEvent(written, {
+      type: "neovimActiveFile",
+      threadId: TARGET.threadId,
+      terminalId: "t3-neovim",
+      sequence: 42,
+      path: "/repo/example.ts",
+      paths: ["/repo/example.ts"],
+    });
+
+    expect(activeFile).toMatchObject({
+      writtenVersion: 41,
+      activeFileVersion: 42,
     });
   });
 });
