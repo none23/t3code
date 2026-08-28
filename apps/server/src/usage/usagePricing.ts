@@ -44,6 +44,9 @@ function finiteNumber(value: unknown): number | null {
  * Entries without both an input and an output rate are dropped: a half-priced
  * model would silently under-report cost, which is worse than reporting the
  * model as unpriced.
+ *
+ * Entries keep their full normalized key; a bare name is aliased only when
+ * exactly one qualified entry claims it and no canonical entry exists.
  */
 export function parseRateTable(document: unknown): RateTable {
   const table = new Map<string, ModelRate>();
@@ -56,7 +59,9 @@ export function parseRateTable(document: unknown): RateTable {
     const output = finiteNumber(entry.output_cost_per_token);
     if (input === null || output === null) continue;
 
-    table.set(normalizeModelName(name), {
+    const key = normalizeRateKey(name);
+    if (key.length === 0) continue;
+    table.set(key, {
       inputCostPerToken: input,
       outputCostPerToken: output,
       // Anthropic bills cache reads at a discount and cache writes at a
@@ -66,20 +71,33 @@ export function parseRateTable(document: unknown): RateTable {
       cacheCreationCostPerToken: finiteNumber(entry.cache_creation_input_token_cost) ?? input,
     });
   }
+
+  // `null` marks a bare name claimed by several entries: no alias for it.
+  const aliasCandidates = new Map<string, ModelRate | null>();
+  for (const [key, rate] of table) {
+    const alias = normalizeModelName(key);
+    if (alias.length === 0 || alias === key || table.has(alias)) continue;
+    aliasCandidates.set(alias, aliasCandidates.has(alias) ? null : rate);
+  }
+  for (const [alias, rate] of aliasCandidates) {
+    if (rate !== null) table.set(alias, rate);
+  }
+
   return table;
 }
 
+function normalizeRateKey(model: string): string {
+  return model.trim().toLowerCase();
+}
+
 /**
- * Canonicalises a model name for lookup.
- *
- * Strips a `provider/` prefix (LiteLLM publishes both `claude-opus-5` and
- * `anthropic/claude-opus-5`) and lowercases, since transcripts are inconsistent
- * about casing.
+ * Strips the `provider/` prefix off a key already passed through
+ * `normalizeRateKey` (LiteLLM publishes both `claude-opus-5` and
+ * `anthropic/claude-opus-5`).
  */
-export function normalizeModelName(model: string): string {
-  const trimmed = model.trim().toLowerCase();
-  const slash = trimmed.lastIndexOf("/");
-  return slash === -1 ? trimmed : trimmed.slice(slash + 1);
+export function normalizeModelName(key: string): string {
+  const slash = key.lastIndexOf("/");
+  return slash === -1 ? key : key.slice(slash + 1);
 }
 
 /**
@@ -99,9 +117,10 @@ const UNPRICEABLE_MODELS = new Set([
 ]);
 
 export function lookupRate(table: RateTable, model: string): ModelRate | null {
-  const normalized = normalizeModelName(model);
-  if (normalized.length === 0 || UNPRICEABLE_MODELS.has(normalized)) return null;
-  return table.get(normalized) ?? null;
+  const key = normalizeRateKey(model);
+  const bareName = normalizeModelName(key);
+  if (bareName.length === 0 || UNPRICEABLE_MODELS.has(bareName)) return null;
+  return table.get(key) ?? null;
 }
 
 export interface PricedUsage {
