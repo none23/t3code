@@ -19,6 +19,7 @@ import {
   TerminalError,
   TerminalHistoryError,
   TerminalNotRunningError,
+  TerminalReservedIdError,
   TerminalProviderInstanceNotFoundError,
   TerminalProviderEnvironmentError,
   TerminalResizeError,
@@ -2785,6 +2786,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
   const openLocked = Effect.fn("terminal.openLocked")(function* (input: TerminalOpenInput) {
     const terminalId = input.terminalId;
+    // The Neovim session is managed exclusively through the neovim APIs.
+    if (terminalId === NEOVIM_TERMINAL_ID) {
+      return yield* new TerminalReservedIdError({ terminalId });
+    }
     yield* assertValidCwd(input.cwd);
 
     const sessionKey = toSessionKey(input.threadId, terminalId);
@@ -3204,6 +3209,10 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     Effect.gen(function* () {
       yield* increment(terminalRestartsTotal, { scope: "thread" });
       const terminalId = input.terminalId;
+      // The Neovim session is managed exclusively through the neovim APIs.
+      if (terminalId === NEOVIM_TERMINAL_ID) {
+        return yield* new TerminalReservedIdError({ terminalId });
+      }
       yield* assertValidCwd(input.cwd);
 
       const sessionKey = toSessionKey(input.threadId, terminalId);

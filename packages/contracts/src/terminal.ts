@@ -375,6 +375,17 @@ export class TerminalHistoryError extends Schema.TaggedError<TerminalHistoryErro
   }
 }
 
+export class TerminalReservedIdError extends Schema.TaggedError<TerminalReservedIdError>()(
+  "TerminalReservedIdError",
+  {
+    terminalId: Schema.String,
+  },
+) {
+  override get message() {
+    return `Terminal id is reserved: ${this.terminalId}`;
+  }
+}
+
 export class TerminalSessionLookupError extends Schema.TaggedError<TerminalSessionLookupError>()(
   "TerminalSessionLookupError",
   {
@@ -455,6 +466,7 @@ export class TerminalResizeError extends Schema.TaggedError<TerminalResizeError>
 export const TerminalError = Schema.Union([
   TerminalCwdError,
   TerminalHistoryError,
+  TerminalReservedIdError,
   TerminalSessionLookupError,
   TerminalProviderInstanceNotFoundError,
   TerminalProviderEnvironmentError,
