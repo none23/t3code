@@ -20,6 +20,10 @@ import { terminalEnvironment } from "~/state/terminal";
 import { useAttachedTerminalSession } from "~/state/terminalSessions";
 import { useAtomCommand } from "~/state/use-atom-command";
 
+// An "error" status is often a transient attach-stream failure that recovers
+// on reconnect; only a status that persists this long closes the panel.
+const NEOVIM_ERROR_EXIT_GRACE_MS = 5_000;
+
 interface NeovimFileSurfaceProps {
   readonly environmentId: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
@@ -118,16 +122,23 @@ function NeovimTerminal({
       handledExitRef.current = false;
       return;
     }
-    // Only a real process exit closes the panel; an "error" status can be a
-    // transient attach-stream failure that recovers on reconnect.
-    if (handledExitRef.current || session.status !== "exited") {
+    if (handledExitRef.current) return;
+    if (session.status === "exited") {
+      handledExitRef.current = true;
+      notifyExit(
+        (typeof session.summary?.exitCode === "number" && session.summary.exitCode !== 0) ||
+          (typeof session.summary?.exitSignal === "number" && session.summary.exitSignal !== 0),
+      );
       return;
     }
-    handledExitRef.current = true;
-    notifyExit(
-      (typeof session.summary?.exitCode === "number" && session.summary.exitCode !== 0) ||
-        (typeof session.summary?.exitSignal === "number" && session.summary.exitSignal !== 0),
-    );
+    if (session.status !== "error") return;
+    // Give a transient stream error time to recover before treating it as a
+    // dead session; the cleanup cancels the exit when the status changes.
+    const timer = setTimeout(() => {
+      handledExitRef.current = true;
+      notifyExit(true);
+    }, NEOVIM_ERROR_EXIT_GRACE_MS);
+    return () => clearTimeout(timer);
   }, [session.status, session.summary?.exitCode, session.summary?.exitSignal]);
 
   useEffect(() => {

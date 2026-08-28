@@ -1122,11 +1122,13 @@ export default function FilePreviewPanel({
   );
 
   // Neovim reports which buffer was written; ":w" can target a file other
-  // than the one the panel is showing.
+  // than the one the panel is showing. When the buffer path cannot be mapped
+  // into the workspace (symlinked cwd, out-of-tree file), fall back to
+  // refreshing the panel's own file rather than refreshing nothing.
   const handleNeovimWritten = useCallback(
     (path: string) => {
       void refreshVcsStatus({ environmentId, input: { cwd } });
-      const writtenRelativePath = resolveWorkspaceRelativePath(path, cwd);
+      const writtenRelativePath = resolveWorkspaceRelativePath(path, cwd) ?? relativePath;
       if (!writtenRelativePath) return;
       refreshProjectFileQueries(environmentId, cwd, writtenRelativePath);
       if (writtenRelativePath === relativePath) file.refresh();
