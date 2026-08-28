@@ -39,28 +39,36 @@ if vim.fn.filereadable(path) ~= 1 then
   error("T3_FILE_NOT_FOUND:" .. path)
 end
 
+-- The edit itself must run on the main loop (vim.schedule); by then the RPC
+-- request has already returned, so failures are surfaced inside Neovim via
+-- vim.notify instead of the RPC response.
 vim.schedule(function()
-  if vim.api.nvim_buf_get_name(0) ~= path then
-    local ok, err = pcall(vim.api.nvim_cmd, { cmd = "edit", args = { path } }, {})
-    if not ok then
-      if string.find(tostring(err), "E37", 1, true) then
-        vim.api.nvim_cmd({ cmd = "tabedit", args = { path } }, {})
-      else
-        error(err)
+  local ok, err = pcall(function()
+    if vim.api.nvim_buf_get_name(0) ~= path then
+      local edited, edit_error = pcall(vim.api.nvim_cmd, { cmd = "edit", args = { path } }, {})
+      if not edited then
+        if string.find(tostring(edit_error), "E37", 1, true) then
+          vim.api.nvim_cmd({ cmd = "tabedit", args = { path } }, {})
+        else
+          error(edit_error)
+        end
       end
     end
-  end
 
-  if line == nil then
-    return
+    if line == nil then
+      return
+    end
+    local buffer = vim.api.nvim_get_current_buf()
+    local last_line = math.max(1, vim.api.nvim_buf_line_count(buffer))
+    local target_line = math.min(math.max(1, line), last_line)
+    local line_text = vim.api.nvim_buf_get_lines(buffer, target_line - 1, target_line, true)[1] or ""
+    local target_column = math.min(math.max(0, column), #line_text)
+    vim.api.nvim_win_set_cursor(0, { target_line, target_column })
+    vim.cmd("normal! zz")
+  end)
+  if not ok then
+    vim.notify("t3-code failed to open " .. path .. ": " .. tostring(err), vim.log.levels.ERROR)
   end
-  local buffer = vim.api.nvim_get_current_buf()
-  local last_line = math.max(1, vim.api.nvim_buf_line_count(buffer))
-  local target_line = math.min(math.max(1, line), last_line)
-  local line_text = vim.api.nvim_buf_get_lines(buffer, target_line - 1, target_line, true)[1] or ""
-  local target_column = math.min(math.max(0, column), #line_text)
-  vim.api.nvim_win_set_cursor(0, { target_line, target_column })
-  vim.cmd("normal! zz")
 end)
 return true
 `;

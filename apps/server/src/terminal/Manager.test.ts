@@ -147,6 +147,8 @@ class FakePtyAdapter {
 class FakeNeovimRpcServer {
   readonly luaCalls: string[] = [];
   onFirstRequest: (() => void) | null = null;
+  /** When set, the next nvim_exec_lua request is answered with this RPC error. */
+  nextLuaError: string | null = null;
   #packr = new Packr({ useRecords: false });
   #server: NodeNet.Server | null = null;
   #socket: NodeNet.Socket | null = null;
@@ -170,6 +172,11 @@ class FakeNeovimRpcServer {
             const params = message[3];
             if (Array.isArray(params) && typeof params[0] === "string") {
               this.luaCalls.push(params[0]);
+            }
+            if (this.nextLuaError !== null) {
+              socket.write(this.#packr.pack([1, message[1], [0, this.nextLuaError], null]));
+              this.nextLuaError = null;
+              continue;
             }
           }
           const result: unknown = method === "nvim_get_api_info" ? [7, {}] : true;
@@ -805,6 +812,34 @@ it.layer(
           ),
         ),
       );
+
+      yield* manager.closeNeovim({ threadId: "thread-neovim" });
+    }),
+  );
+
+  it.effect("maps Neovim's file-not-found marker to NeovimFileNotFoundError", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ptyAdapter = new FakeNeovimPtyAdapter();
+      yield* Effect.addFinalizer(() => Effect.promise(() => ptyAdapter.rpc.close()));
+      const { manager, baseDir } = yield* createManager(5, { ptyAdapter });
+      const firstPath = path.join(baseDir, "first.ts");
+      const secondPath = path.join(baseDir, "second.ts");
+      yield* writeFileString(firstPath, "export {};");
+      yield* writeFileString(secondPath, "export {};");
+
+      yield* manager.openNeovim({ threadId: "thread-neovim", cwd: baseDir, path: firstPath });
+
+      // The file can vanish between the manager's stat and Neovim's own
+      // readability check; the RPC error marker must map to a typed error.
+      ptyAdapter.rpc.nextLuaError = `Error executing lua: T3_FILE_NOT_FOUND:${secondPath}`;
+      const error = yield* Effect.flip(
+        manager.openNeovim({ threadId: "thread-neovim", cwd: baseDir, path: secondPath }),
+      );
+      expect(error).toMatchObject({
+        _tag: "NeovimFileNotFoundError",
+        path: secondPath,
+      });
 
       yield* manager.closeNeovim({ threadId: "thread-neovim" });
     }),

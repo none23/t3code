@@ -3247,11 +3247,17 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           yield* Effect.tryPromise({
             try: () =>
               session.neovimControl!.client.openFile(absolutePath, input.line, input.column),
-            catch: (cause) =>
-              new NeovimControlError({
+            catch: (cause) => {
+              // Neovim re-checks readability; the file can vanish between our
+              // stat above and the RPC call.
+              if (cause instanceof Error && cause.message.includes("T3_FILE_NOT_FOUND:")) {
+                return new NeovimFileNotFoundError({ path: absolutePath });
+              }
+              return new NeovimControlError({
                 message:
                   cause instanceof Error ? cause.message : "Unable to open the file in Neovim.",
-              }),
+              });
+            },
           });
         }
         return snapshot(session);
