@@ -99,8 +99,10 @@ const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
 const NEOVIM_HISTORY_BYTE_LIMIT = 128 * 1024;
 const NEOVIM_SWAP_DIRECTORY_ENV = "T3_CODE_NVIM_SWAP_DIRECTORY";
+// The trailing "//" makes Neovim build swap-file names from the full buffer
+// path, so same-named files in different directories cannot collide.
 const NEOVIM_SWAP_DIRECTORY_COMMAND =
-  "lua vim.opt.directory = { assert(vim.env.T3_CODE_NVIM_SWAP_DIRECTORY) }";
+  'lua vim.opt.directory = { assert(vim.env.T3_CODE_NVIM_SWAP_DIRECTORY) .. "//" }';
 const TERMINAL_ENV_BLOCKLIST = new Set([
   "PORT",
   "ELECTRON_RENDERER_PORT",

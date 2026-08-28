@@ -741,7 +741,7 @@ it.layer(
       });
       expect(ptyAdapter.spawnInputs[0]?.args).toEqual([
         "--cmd",
-        "lua vim.opt.directory = { assert(vim.env.T3_CODE_NVIM_SWAP_DIRECTORY) }",
+        'lua vim.opt.directory = { assert(vim.env.T3_CODE_NVIM_SWAP_DIRECTORY) .. "//" }',
         "--listen",
         expect.any(String),
         "+call cursor(1,1)",
