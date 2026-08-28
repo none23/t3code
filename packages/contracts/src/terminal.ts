@@ -277,7 +277,7 @@ export const NeovimOpenInput = Schema.Struct({
   rows: Schema.optional(TerminalRowsSchema),
   env: Schema.optional(TerminalEnvSchema),
 });
-export type NeovimOpenInput = Schema.Codec.Encoded<typeof NeovimOpenInput>;
+export type NeovimOpenInput = typeof NeovimOpenInput.Type;
 
 export const NeovimChecktimeInput = TerminalThreadInput;
 export type NeovimChecktimeInput = typeof NeovimChecktimeInput.Type;
