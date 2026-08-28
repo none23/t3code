@@ -2237,78 +2237,77 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
             if (session.kind === "neovim" && neovimEndpoint) {
               const endpoint = neovimEndpoint;
+              // Notifications race against restarts: the session object is
+              // reused, so guard on the client identity too — a replaced
+              // client's queued notifications must not touch the new run.
+              let liveClient: NeovimRpcClient | null = null;
+              const onNeovimNotification = (handle: Effect.Effect<void>) => {
+                runFork(
+                  withThreadLock(
+                    session.threadId,
+                    Effect.gen(function* () {
+                      const current = yield* getSession(session.threadId, session.terminalId);
+                      if (
+                        Option.isNone(current) ||
+                        current.value !== session ||
+                        liveClient === null ||
+                        session.neovimControl?.client !== liveClient
+                      )
+                        return;
+                      yield* handle;
+                    }),
+                  ),
+                );
+              };
               const client = yield* Effect.tryPromise({
                 try: () =>
                   NeovimRpcClient.connect(endpoint.address, {
-                    onDirty: (dirty) => {
-                      runFork(
-                        withThreadLock(
-                          session.threadId,
-                          Effect.gen(function* () {
-                            const current = yield* getSession(session.threadId, session.terminalId);
-                            if (
-                              Option.isNone(current) ||
-                              current.value !== session ||
-                              session.kind !== "neovim" ||
-                              session.dirty === dirty
-                            )
-                              return;
-                            session.dirty = dirty;
-                            const stamp = advanceEventSequence(session);
-                            yield* publishEvent({
-                              type: "neovimState",
-                              threadId: session.threadId,
-                              terminalId: session.terminalId,
-                              sequence: stamp.sequence,
-                              dirty,
-                            });
-                          }),
-                        ),
-                      );
-                    },
-                    onWritten: (writtenPath) => {
-                      runFork(
-                        withThreadLock(
-                          session.threadId,
-                          Effect.gen(function* () {
-                            const current = yield* getSession(session.threadId, session.terminalId);
-                            if (Option.isNone(current) || current.value !== session) return;
-                            const stamp = advanceEventSequence(session);
-                            yield* publishEvent({
-                              type: "neovimWritten",
-                              threadId: session.threadId,
-                              terminalId: session.terminalId,
-                              sequence: stamp.sequence,
-                              path: writtenPath,
-                            });
-                            yield* onNeovimWrite({
-                              cwd: session.cwd,
-                              path: writtenPath,
-                            }).pipe(Effect.ignoreCause({ log: true }));
-                          }),
-                        ),
-                      );
-                    },
-                    onActiveFile: (activePath, paths) => {
-                      runFork(
-                        withThreadLock(
-                          session.threadId,
-                          Effect.gen(function* () {
-                            const current = yield* getSession(session.threadId, session.terminalId);
-                            if (Option.isNone(current) || current.value !== session) return;
-                            const stamp = advanceEventSequence(session);
-                            yield* publishEvent({
-                              type: "neovimActiveFile",
-                              threadId: session.threadId,
-                              terminalId: session.terminalId,
-                              sequence: stamp.sequence,
-                              path: activePath,
-                              paths,
-                            });
-                          }),
-                        ),
-                      );
-                    },
+                    onDirty: (dirty) =>
+                      onNeovimNotification(
+                        Effect.gen(function* () {
+                          if (session.dirty === dirty) return;
+                          session.dirty = dirty;
+                          const stamp = advanceEventSequence(session);
+                          yield* publishEvent({
+                            type: "neovimState",
+                            threadId: session.threadId,
+                            terminalId: session.terminalId,
+                            sequence: stamp.sequence,
+                            dirty,
+                          });
+                        }),
+                      ),
+                    onWritten: (writtenPath) =>
+                      onNeovimNotification(
+                        Effect.gen(function* () {
+                          const stamp = advanceEventSequence(session);
+                          yield* publishEvent({
+                            type: "neovimWritten",
+                            threadId: session.threadId,
+                            terminalId: session.terminalId,
+                            sequence: stamp.sequence,
+                            path: writtenPath,
+                          });
+                          yield* onNeovimWrite({
+                            cwd: session.cwd,
+                            path: writtenPath,
+                          }).pipe(Effect.ignoreCause({ log: true }));
+                        }),
+                      ),
+                    onActiveFile: (activePath, paths) =>
+                      onNeovimNotification(
+                        Effect.gen(function* () {
+                          const stamp = advanceEventSequence(session);
+                          yield* publishEvent({
+                            type: "neovimActiveFile",
+                            threadId: session.threadId,
+                            terminalId: session.terminalId,
+                            sequence: stamp.sequence,
+                            path: activePath,
+                            paths,
+                          });
+                        }),
+                      ),
                   }),
                 catch: (cause) =>
                   new PtyAdapter.PtySpawnError({
@@ -2316,6 +2315,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
                     cause,
                   }),
               });
+              liveClient = client;
               session.neovimControl = { client, endpoint };
             }
 
