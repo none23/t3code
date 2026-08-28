@@ -66,7 +66,8 @@ return true
 `;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
-const STARTUP_REQUEST_TIMEOUT_MS = 30_000;
+const STARTUP_DEADLINE_MS = 30_000;
+const CONNECT_DEADLINE_MS = 3_000;
 
 const INSTALL_AUTOCMDS_LUA = String.raw`
 local channel = ...
@@ -213,16 +214,25 @@ function isIncompleteDecodeError(error: unknown): error is IncompleteDecodeError
   );
 }
 
-function connectSocket(address: string): Promise<NodeNet.Socket> {
+function connectSocket(address: string, timeoutMs: number): Promise<NodeNet.Socket> {
   return new Promise((resolve, reject) => {
     const socket = NodeNet.createConnection(address);
-    const onError = (error: Error) => {
+    // A connect attempt can hang indefinitely (for example on a stale unix
+    // socket path). Callers run under the per-thread terminal lock, so every
+    // attempt must resolve or fail within a bounded time.
+    const fail = (error: Error) => {
+      clearTimeout(timer);
       socket.destroy();
       reject(error);
     };
-    socket.once("error", onError);
+    const timer = setTimeout(
+      () => fail(new Error(`Timed out connecting to Neovim at ${address}.`)),
+      timeoutMs,
+    );
+    socket.once("error", fail);
     socket.once("connect", () => {
-      socket.off("error", onError);
+      clearTimeout(timer);
+      socket.off("error", fail);
       socket.setNoDelay(true);
       resolve(socket);
     });
@@ -230,16 +240,16 @@ function connectSocket(address: string): Promise<NodeNet.Socket> {
 }
 
 async function connectWithRetry(address: string): Promise<NodeNet.Socket> {
-  const deadline = Date.now() + 3_000;
+  const deadline = Date.now() + CONNECT_DEADLINE_MS;
   let lastError: unknown;
-  while (Date.now() < deadline) {
+  do {
     try {
-      return await connectSocket(address);
+      return await connectSocket(address, Math.max(50, deadline - Date.now()));
     } catch (error) {
       lastError = error;
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
-  }
+  } while (Date.now() < deadline);
   throw rpcError(lastError);
 }
 
@@ -281,23 +291,27 @@ export class NeovimRpcClient {
     notifications: NeovimRpcNotifications,
   ): Promise<NeovimRpcClient> {
     const client = new NeovimRpcClient(await connectWithRetry(address), notifications);
-    const apiInfo = await client.request("nvim_get_api_info", [], STARTUP_REQUEST_TIMEOUT_MS);
-    if (!Array.isArray(apiInfo) || typeof apiInfo[0] !== "number") {
+    // The handshake runs under the per-thread terminal lock, so the whole
+    // startup shares one deadline instead of stacking per-request timeouts.
+    const deadline = Date.now() + STARTUP_DEADLINE_MS;
+    const remainingMs = () => Math.max(1, deadline - Date.now());
+    try {
+      const apiInfo = await client.request("nvim_get_api_info", [], remainingMs());
+      if (!Array.isArray(apiInfo) || typeof apiInfo[0] !== "number") {
+        throw new Error("Neovim returned an invalid API handshake.");
+      }
+      const channel = apiInfo[0];
+      await client.request(
+        "nvim_set_client_info",
+        ["t3-code", { major: 1 }, "remote", {}, { website: "https://t3.codes" }],
+        remainingMs(),
+      );
+      await client.request("nvim_exec_lua", [INSTALL_AUTOCMDS_LUA, [channel]], remainingMs());
+      return client;
+    } catch (error) {
       client.close();
-      throw new Error("Neovim returned an invalid API handshake.");
+      throw error;
     }
-    const channel = apiInfo[0];
-    await client.request(
-      "nvim_set_client_info",
-      ["t3-code", { major: 1 }, "remote", {}, { website: "https://t3.codes" }],
-      STARTUP_REQUEST_TIMEOUT_MS,
-    );
-    await client.request(
-      "nvim_exec_lua",
-      [INSTALL_AUTOCMDS_LUA, [channel]],
-      STARTUP_REQUEST_TIMEOUT_MS,
-    );
-    return client;
   }
 
   async openFile(path: string, line?: number, column = 1): Promise<void> {
@@ -397,7 +411,11 @@ export class NeovimRpcClient {
     } catch (error) {
       if (!this.#closed) this.#failPending(rpcError(error));
     } finally {
+      // The read loop can die on a decode error while the socket is still
+      // open. Destroy it here so close() being a no-op afterwards cannot leak
+      // the file descriptor.
       this.#closed = true;
+      this.#socket.destroy();
       this.#failPending(new Error("Neovim RPC connection closed."));
     }
   }

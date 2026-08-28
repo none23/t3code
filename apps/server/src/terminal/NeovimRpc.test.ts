@@ -46,6 +46,96 @@ it.effect("removes the embedded Neovim swap directory during cleanup", () =>
   }),
 );
 
+it.effect("closes the connection when the startup handshake fails", () =>
+  Effect.gen(function* () {
+    const platform = yield* HostProcessPlatform;
+    yield* Effect.tryPromise(async () => {
+      const endpoint = await createNeovimRpcEndpoint(platform);
+      const packr = new Packr({ useRecords: false });
+      const unpackr = new Unpackr({ useRecords: false });
+      let notifyClosed: (() => void) | undefined;
+      const socketClosed = new Promise<void>((resolve) => {
+        notifyClosed = resolve;
+      });
+      const server = NodeNet.createServer((socket) => {
+        socket.on("close", () => notifyClosed?.());
+        socket.on("data", (chunk) => {
+          const decoded: unknown = unpackr.unpackMultiple(chunk);
+          if (!Array.isArray(decoded)) return;
+          for (const message of decoded) {
+            if (!Array.isArray(message) || typeof message[1] !== "number") continue;
+            socket.write(packr.pack([1, message[1], null, "not-api-info"]));
+          }
+        });
+      });
+
+      await listen(server, endpoint.address);
+      try {
+        await expect(
+          NeovimRpcClient.connect(endpoint.address, {
+            onDirty: () => undefined,
+            onWritten: () => undefined,
+            onActiveFile: () => undefined,
+          }),
+        ).rejects.toThrow("Neovim returned an invalid API handshake.");
+        await socketClosed;
+      } finally {
+        await closeServer(server);
+        await endpoint.cleanup();
+      }
+    });
+  }),
+);
+
+it.effect("fails pending requests when the RPC stream ends", () =>
+  Effect.gen(function* () {
+    const platform = yield* HostProcessPlatform;
+    yield* Effect.tryPromise(async () => {
+      const endpoint = await createNeovimRpcEndpoint(platform);
+      const packr = new Packr({ useRecords: false });
+      const unpackr = new Unpackr({ useRecords: false });
+      const server = NodeNet.createServer((socket) => {
+        socket.on("data", (chunk) => {
+          const decoded: unknown = unpackr.unpackMultiple(chunk);
+          if (!Array.isArray(decoded)) return;
+          for (const message of decoded) {
+            if (!Array.isArray(message) || typeof message[1] !== "number") continue;
+            const method = typeof message[2] === "string" ? message[2] : "";
+            if (method === "nvim_hang") {
+              socket.destroy();
+              continue;
+            }
+            const result: unknown = method === "nvim_get_api_info" ? [7, {}] : true;
+            socket.write(packr.pack([1, message[1], null, result]));
+          }
+        });
+      });
+
+      await listen(server, endpoint.address);
+      let client: NeovimRpcClient | undefined;
+      try {
+        client = await NeovimRpcClient.connect(endpoint.address, {
+          onDirty: () => undefined,
+          onWritten: () => undefined,
+          onActiveFile: () => undefined,
+        });
+        // The pending request must reject when the stream dies, without
+        // waiting for its own timeout.
+        await expect(client.request("nvim_hang", [], 30_000)).rejects.toThrow(
+          "Neovim RPC connection closed.",
+        );
+        await expect(client.request("nvim_after", [])).rejects.toThrow(
+          "Neovim RPC connection is closed.",
+        );
+      } finally {
+        client?.close();
+        await closeServer(server);
+        await endpoint.cleanup();
+      }
+    });
+  }),
+);
+
 it.effect("decodes Neovim RPC responses split across socket chunks", () =>
   Effect.gen(function* () {
     const platform = yield* HostProcessPlatform;
