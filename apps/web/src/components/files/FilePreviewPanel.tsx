@@ -1121,12 +1121,18 @@ export default function FilePreviewPanel({
     [cwd, onNeovimFilesChange],
   );
 
-  const handleNeovimWritten = useCallback(() => {
-    void refreshVcsStatus({ environmentId, input: { cwd } });
-    if (!relativePath) return;
-    refreshProjectFileQueries(environmentId, cwd, relativePath);
-    file.refresh();
-  }, [cwd, environmentId, file, refreshVcsStatus, relativePath]);
+  // Neovim reports which buffer was written; ":w" can target a file other
+  // than the one the panel is showing.
+  const handleNeovimWritten = useCallback(
+    (path: string) => {
+      void refreshVcsStatus({ environmentId, input: { cwd } });
+      const writtenRelativePath = resolveWorkspaceRelativePath(path, cwd);
+      if (!writtenRelativePath) return;
+      refreshProjectFileQueries(environmentId, cwd, writtenRelativePath);
+      if (writtenRelativePath === relativePath) file.refresh();
+    },
+    [cwd, environmentId, file, refreshVcsStatus, relativePath],
+  );
 
   useEffect(() => {
     const currentCrumb = breadcrumbRef.current?.querySelector<HTMLElement>(
