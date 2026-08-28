@@ -2213,28 +2213,27 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             }
 
             const processPid = ptyProcess.pid;
-            const unsubscribeData = ptyProcess.onData((data) => {
-              if (
-                !enqueueProcessEvent(session, processPid, {
-                  type: "output",
-                  data,
-                })
-              ) {
+            // PTY output (and even an exit) can arrive before the session is
+            // registered as running below — during the Neovim RPC handshake in
+            // particular. Buffer those events and replay them once the session
+            // accepts events, so an early exit cannot leave a zombie "running"
+            // session and the first screen paint is not lost.
+            const startupEvents: PendingProcessEvent[] = [];
+            let acceptingProcessEvents = false;
+            const deliverProcessEvent = (event: PendingProcessEvent) => {
+              if (!acceptingProcessEvents) {
+                startupEvents.push(event);
                 return;
               }
+              if (!enqueueProcessEvent(session, processPid, event)) return;
               runFork(drainProcessEvents(session, processPid));
-            });
-            const unsubscribeExit = ptyProcess.onExit((event) => {
-              if (
-                !enqueueProcessEvent(session, processPid, {
-                  type: "exit",
-                  event,
-                })
-              ) {
-                return;
-              }
-              runFork(drainProcessEvents(session, processPid));
-            });
+            };
+            const unsubscribeData = ptyProcess.onData((data) =>
+              deliverProcessEvent({ type: "output", data }),
+            );
+            const unsubscribeExit = ptyProcess.onExit((event) =>
+              deliverProcessEvent({ type: "exit", event }),
+            );
 
             if (session.kind === "neovim" && neovimEndpoint) {
               const endpoint = neovimEndpoint;
@@ -2341,6 +2340,16 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
               sequence: eventStamp.sequence,
               snapshot: snapshot(session),
             });
+
+            // Synchronously flip to live delivery and flush the buffered
+            // startup events so nothing interleaves out of order.
+            acceptingProcessEvents = true;
+            let shouldDrain = false;
+            for (const event of startupEvents) {
+              shouldDrain = enqueueProcessEvent(session, processPid, event) || shouldDrain;
+            }
+            startupEvents.length = 0;
+            if (shouldDrain) runFork(drainProcessEvents(session, processPid));
           }),
         ),
       ),

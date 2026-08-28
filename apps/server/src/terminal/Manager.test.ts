@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeNet from "node:net";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
@@ -10,6 +13,7 @@ import {
   type TerminalRestartInput,
 } from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { Packr, Unpackr } from "msgpackr";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -136,6 +140,72 @@ class FakePtyAdapter {
       });
     }
     return Effect.succeed(process);
+  }
+}
+
+/** Speaks just enough msgpack-RPC to satisfy the Manager's Neovim handshake. */
+class FakeNeovimRpcServer {
+  readonly luaCalls: string[] = [];
+  onFirstRequest: (() => void) | null = null;
+  #packr = new Packr({ useRecords: false });
+  #server: NodeNet.Server | null = null;
+  #socket: NodeNet.Socket | null = null;
+  #sawRequest = false;
+
+  listen(address: string): void {
+    const unpackr = new Unpackr({ useRecords: false });
+    this.#server = NodeNet.createServer((socket) => {
+      this.#socket = socket;
+      socket.on("data", (chunk) => {
+        const decoded: unknown = unpackr.unpackMultiple(chunk);
+        if (!Array.isArray(decoded)) return;
+        for (const message of decoded) {
+          if (!Array.isArray(message) || typeof message[1] !== "number") continue;
+          const method = typeof message[2] === "string" ? message[2] : "";
+          if (!this.#sawRequest) {
+            this.#sawRequest = true;
+            this.onFirstRequest?.();
+          }
+          if (method === "nvim_exec_lua") {
+            const params = message[3];
+            if (Array.isArray(params) && typeof params[0] === "string") {
+              this.luaCalls.push(params[0]);
+            }
+          }
+          const result: unknown = method === "nvim_get_api_info" ? [7, {}] : true;
+          socket.write(this.#packr.pack([1, message[1], null, result]));
+        }
+      });
+    });
+    this.#server.listen(address);
+  }
+
+  notify(method: string, params: ReadonlyArray<unknown>): void {
+    this.#socket?.write(this.#packr.pack([2, method, params]));
+  }
+
+  close(): Promise<void> {
+    this.#socket?.destroy();
+    const server = this.#server;
+    if (!server) return Promise.resolve();
+    return new Promise((resolve) => server.close(() => resolve()));
+  }
+}
+
+/** Serves the Manager's generated `--listen` address with a fake nvim RPC peer. */
+class FakeNeovimPtyAdapter extends FakePtyAdapter {
+  readonly rpc = new FakeNeovimRpcServer();
+
+  override spawn(
+    input: PtyAdapter.PtySpawnInput,
+  ): Effect.Effect<PtyAdapter.PtyProcess, PtyAdapter.PtySpawnError> {
+    const spawned = super.spawn(input);
+    if (input.shell === "nvim") {
+      const listenIndex = input.args?.indexOf("--listen") ?? -1;
+      const address = listenIndex >= 0 ? input.args?.[listenIndex + 1] : undefined;
+      if (address) this.rpc.listen(address);
+    }
+    return spawned;
   }
 }
 
@@ -687,6 +757,56 @@ it.layer(
         terminalId: NEOVIM_TERMINAL_ID,
         kind: "neovim",
       });
+    }),
+  );
+
+  it.effect("delivers PTY output that arrives while Neovim is starting", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ptyAdapter = new FakeNeovimPtyAdapter();
+      yield* Effect.addFinalizer(() => Effect.promise(() => ptyAdapter.rpc.close()));
+      const { manager, baseDir, getEvents } = yield* createManager(5, { ptyAdapter });
+      const filePath = path.join(baseDir, "example.ts");
+      yield* writeFileString(filePath, "export {};");
+
+      // Neovim paints its first screen while the RPC handshake is still in
+      // flight; that output must reach subscribers after the started event.
+      ptyAdapter.rpc.onFirstRequest = () => {
+        ptyAdapter.processes.at(-1)?.emitData("NVIM-BOOT");
+      };
+
+      const opened = yield* manager.openNeovim({
+        threadId: "thread-neovim",
+        cwd: baseDir,
+        path: filePath,
+      });
+      expect(opened.status).toBe("running");
+      expect(opened.kind).toBe("neovim");
+
+      yield* waitFor(
+        getEvents.pipe(
+          Effect.map((events) =>
+            events.some((event) => event.type === "output" && event.data === "NVIM-BOOT"),
+          ),
+        ),
+      );
+      const events = yield* getEvents;
+      const startedIndex = events.findIndex((event) => event.type === "started");
+      const outputIndex = events.findIndex((event) => event.type === "output");
+      expect(startedIndex).toBeGreaterThanOrEqual(0);
+      expect(outputIndex).toBeGreaterThan(startedIndex);
+
+      // Dirty notifications from nvim surface as neovimState events.
+      ptyAdapter.rpc.notify("t3_dirty", [true]);
+      yield* waitFor(
+        getEvents.pipe(
+          Effect.map((events) =>
+            events.some((event) => event.type === "neovimState" && event.dirty),
+          ),
+        ),
+      );
+
+      yield* manager.closeNeovim({ threadId: "thread-neovim" });
     }),
   );
 
