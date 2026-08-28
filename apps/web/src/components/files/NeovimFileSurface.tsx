@@ -118,13 +118,14 @@ function NeovimTerminal({
       handledExitRef.current = false;
       return;
     }
-    if (handledExitRef.current || (session.status !== "exited" && session.status !== "error")) {
+    // Only a real process exit closes the panel; an "error" status can be a
+    // transient attach-stream failure that recovers on reconnect.
+    if (handledExitRef.current || session.status !== "exited") {
       return;
     }
     handledExitRef.current = true;
     notifyExit(
-      session.status === "error" ||
-        (typeof session.summary?.exitCode === "number" && session.summary.exitCode !== 0) ||
+      (typeof session.summary?.exitCode === "number" && session.summary.exitCode !== 0) ||
         (typeof session.summary?.exitSignal === "number" && session.summary.exitSignal !== 0),
     );
   }, [session.status, session.summary?.exitCode, session.summary?.exitSignal]);
