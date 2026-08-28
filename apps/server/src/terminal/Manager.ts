@@ -2364,6 +2364,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     let ptyProcess: PtyAdapter.PtyProcess | null = null;
     let startedShell: string | null = null;
     let neovimEndpoint: NeovimRpcEndpoint | null = null;
+    const startupHandlerCleanups: Array<() => void> = [];
 
     const startResult = yield* Effect.result(
       increment(terminalSessionsTotal, { lifecycle: eventType }).pipe(
@@ -2432,6 +2433,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             const unsubscribeExit = ptyProcess.onExit((event) =>
               deliverProcessEvent({ type: "exit", event }),
             );
+            startupHandlerCleanups.push(unsubscribeData, unsubscribeExit);
 
             if (session.kind === "neovim" && neovimEndpoint) {
               const endpoint = neovimEndpoint;
@@ -2557,6 +2559,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
     {
       const error = startResult.failure;
+      // The handlers were never attached to the session, so cleanupProcessHandles
+      // below cannot release them — and they buffer PTY output until then.
+      for (const cleanup of startupHandlerCleanups) cleanup();
       if (session.neovimControl) {
         session.neovimControl.client.close();
         session.neovimControl = null;
@@ -3225,12 +3230,12 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
   const restartResolved = (input: TerminalRestartInput) =>
     Effect.gen(function* () {
-      yield* increment(terminalRestartsTotal, { scope: "thread" });
       const terminalId = input.terminalId;
       // The Neovim session is managed exclusively through the neovim APIs.
       if (terminalId === NEOVIM_TERMINAL_ID) {
         return yield* new TerminalReservedIdError({ terminalId });
       }
+      yield* increment(terminalRestartsTotal, { scope: "thread" });
       yield* assertValidCwd(input.cwd);
 
       const sessionKey = toSessionKey(input.threadId, terminalId);
