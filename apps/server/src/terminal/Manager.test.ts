@@ -810,6 +810,24 @@ it.layer(
     }),
   );
 
+  it.effect("rejects the reserved Neovim terminal id in shell terminal APIs", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager();
+
+      const openError = yield* Effect.flip(
+        manager.open(openInput({ terminalId: NEOVIM_TERMINAL_ID })),
+      );
+      expect(openError).toMatchObject({ _tag: "TerminalReservedIdError" });
+
+      const restartError = yield* Effect.flip(
+        manager.restart(restartInput({ terminalId: NEOVIM_TERMINAL_ID })),
+      );
+      expect(restartError).toMatchObject({ _tag: "TerminalReservedIdError" });
+
+      expect(ptyAdapter.spawnInputs).toHaveLength(0);
+    }),
+  );
+
   it.effect("forwards write and resize to active pty process", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
