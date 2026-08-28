@@ -232,11 +232,14 @@ export function applyTerminalAttachStreamEvent(
         dirty: event.dirty,
         version: current.version + 1,
       };
+    // Version counters prefer the server's per-session event sequence so they
+    // stay stable across snapshot resets; the local increment is a fallback
+    // for servers that do not stamp events yet.
     case "neovimWritten":
       return {
         ...current,
         writtenPath: event.path,
-        writtenVersion: current.version + 1,
+        writtenVersion: event.sequence ?? current.writtenVersion + 1,
         version: current.version + 1,
       };
     case "neovimActiveFile":
@@ -244,7 +247,7 @@ export function applyTerminalAttachStreamEvent(
         ...current,
         activeFilePath: event.path,
         filePaths: event.paths,
-        activeFileVersion: current.activeFileVersion + 1,
+        activeFileVersion: event.sequence ?? current.activeFileVersion + 1,
         version: current.version + 1,
       };
   }
