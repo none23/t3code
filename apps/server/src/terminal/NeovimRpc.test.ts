@@ -87,6 +87,42 @@ it.effect("closes the connection when the startup handshake fails", () =>
   }),
 );
 
+it.effect("rejects Neovim builds older than 0.8 with an actionable error", () =>
+  Effect.gen(function* () {
+    const platform = yield* HostProcessPlatform;
+    yield* Effect.tryPromise(async () => {
+      const endpoint = await createNeovimRpcEndpoint(platform);
+      const packr = new Packr({ useRecords: false });
+      const unpackr = new Unpackr({ useRecords: false });
+      const server = NodeNet.createServer((socket) => {
+        socket.on("data", (chunk) => {
+          const decoded: unknown = unpackr.unpackMultiple(chunk);
+          if (!Array.isArray(decoded)) return;
+          for (const message of decoded) {
+            if (!Array.isArray(message) || typeof message[1] !== "number") continue;
+            const apiInfo = [7, { version: { major: 0, minor: 7, patch: 2 } }];
+            socket.write(packr.pack([1, message[1], null, apiInfo]));
+          }
+        });
+      });
+
+      await listen(server, endpoint.address);
+      try {
+        await expect(
+          NeovimRpcClient.connect(endpoint.address, {
+            onDirty: () => undefined,
+            onWritten: () => undefined,
+            onActiveFile: () => undefined,
+          }),
+        ).rejects.toThrow("T3 Code requires Neovim 0.8 or newer; found 0.7.2.");
+      } finally {
+        await closeServer(server);
+        await endpoint.cleanup();
+      }
+    });
+  }),
+);
+
 it.effect("fails pending requests when the RPC stream ends", () =>
   Effect.gen(function* () {
     const platform = yield* HostProcessPlatform;
