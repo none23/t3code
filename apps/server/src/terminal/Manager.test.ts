@@ -17,6 +17,7 @@ import {
   TerminalProviderInstanceNotFoundError,
 } from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { CommandResolutionError } from "@t3tools/shared/shell";
 import { Packr, Unpackr } from "msgpackr";
 import * as Data from "effect/Data";
 import * as Clock from "effect/Clock";
@@ -315,6 +316,7 @@ interface CreateManagerOptions {
   resolveProviderInstanceEnvironment?: Parameters<
     typeof TerminalManager.makeWithOptions
   >[0]["resolveProviderInstanceEnvironment"];
+  resolveNeovimBinary?: TerminalManager.TerminalManagerOptions["resolveNeovimBinary"];
 }
 
 interface ManagerFixture {
@@ -365,6 +367,8 @@ const createManager = (
         ...(options.resolveProviderInstanceEnvironment !== undefined
           ? { resolveProviderInstanceEnvironment: options.resolveProviderInstanceEnvironment }
           : {}),
+        // Tests must not depend on a real nvim install on the host.
+        resolveNeovimBinary: options.resolveNeovimBinary ?? (() => Effect.succeed("nvim")),
       });
       const eventsRef = yield* Ref.make<ReadonlyArray<TerminalEvent>>([]);
       const unsubscribe = yield* manager.subscribe((event) =>
@@ -864,6 +868,28 @@ it.layer(
       });
 
       yield* manager.closeNeovim({ threadId: "thread-neovim" });
+    }),
+  );
+
+  it.effect("reports a missing nvim binary as an actionable NeovimUnavailableError", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const ptyAdapter = new FakeNeovimPtyAdapter();
+      const { manager, baseDir } = yield* createManager(5, {
+        ptyAdapter,
+        resolveNeovimBinary: () =>
+          Effect.fail(new CommandResolutionError({ command: "nvim", reason: "not-found" })),
+      });
+      const filePath = path.join(baseDir, "missing-nvim.ts");
+      yield* writeFileString(filePath, "export {};");
+
+      const error = yield* Effect.flip(
+        manager.openNeovim({ threadId: "thread-neovim", cwd: baseDir, path: filePath }),
+      );
+
+      expect(error._tag).toBe("NeovimUnavailableError");
+      expect(error.message).toContain("was not found on this machine's PATH");
+      expect(ptyAdapter.spawnInputs).toHaveLength(0);
     }),
   );
 

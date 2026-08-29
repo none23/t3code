@@ -52,6 +52,7 @@ import {
 } from "@t3tools/contracts";
 import { makeKeyedCoalescingWorker } from "@t3tools/shared/KeyedCoalescingWorker";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { resolveCommandPath, type CommandResolutionError } from "@t3tools/shared/shell";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
@@ -1421,7 +1422,7 @@ function cleanupNeovimEndpoint(endpoint: NeovimRpcEndpoint | null | undefined) {
     : Effect.void;
 }
 
-interface TerminalManagerOptions {
+export interface TerminalManagerOptions {
   logsDir: string;
   historyLineLimit?: number;
   historyByteLimit?: number;
@@ -1453,6 +1454,8 @@ interface TerminalManagerOptions {
     TerminalProviderInstanceNotFoundError | TerminalProviderEnvironmentError
   >;
   onNeovimWrite?: (input: { readonly cwd: string; readonly path: string }) => Effect.Effect<void>;
+  /** Test seam: locates the nvim executable for the spawn environment. */
+  resolveNeovimBinary?: (env: NodeJS.ProcessEnv) => Effect.Effect<string, CommandResolutionError>;
 }
 
 export const resolveProviderInstanceTerminalEnvironment = Effect.fn(
@@ -1633,6 +1636,13 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   const registerTerminalProcesses = options.registerTerminalProcesses ?? (() => Effect.void);
   const unregisterTerminal = options.unregisterTerminal ?? (() => Effect.void);
   const onNeovimWrite = options.onNeovimWrite ?? (() => Effect.void);
+  const resolveNeovimBinary =
+    options.resolveNeovimBinary ??
+    ((env: NodeJS.ProcessEnv) =>
+      resolveCommandPath("nvim", { env }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+      ));
 
   yield* fileSystem.makeDirectory(logsDir, { recursive: true }).pipe(Effect.orDie);
 
@@ -2398,6 +2408,23 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             if (session.kind === "neovim") {
               delete terminalEnv.NVIM;
               delete terminalEnv.NVIM_LISTEN_ADDRESS;
+              // Spawning a bare "nvim" is unreliable across platforms (PTY
+              // layers differ in PATH and PATHEXT handling) and a miss
+              // surfaces as a cryptic ENOENT. Resolve the executable up
+              // front so a missing install becomes an actionable error.
+              const nvimBinary = yield* resolveNeovimBinary(terminalEnv).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new PtyAdapter.PtySpawnError({
+                      adapter: "neovim-binary",
+                      shell: "nvim",
+                      cause: new Error(
+                        "Neovim (nvim) was not found on this machine's PATH. Install Neovim 0.8 or newer to edit files with it.",
+                        { cause },
+                      ),
+                    }),
+                ),
+              );
               neovimEndpoint = yield* Effect.tryPromise({
                 try: () => createNeovimRpcEndpoint(platform),
                 catch: (cause) =>
@@ -2408,7 +2435,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
               });
               terminalEnv[NEOVIM_SWAP_DIRECTORY_ENV] = neovimEndpoint.swapDirectory;
               ptyProcess = yield* options.ptyAdapter.spawn({
-                shell: "nvim",
+                shell: nvimBinary,
                 args: [
                   "--cmd",
                   NEOVIM_SWAP_DIRECTORY_COMMAND,
