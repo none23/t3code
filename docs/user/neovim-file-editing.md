@@ -6,6 +6,8 @@ by each browser or desktop client.
 
 When enabled, opening a text file from agent output, the file explorer, project search, or a diff
 filename opens your environment's `nvim` executable with your normal configuration and plugins.
+The feature requires Neovim 0.8 or newer on the environment host's PATH; if `nvim` is missing or
+too old, the file panel explains what to install instead of opening the file.
 Neovim starts in the thread's worktree root and remains attached to that thread while you switch
 threads or reconnect. Each listed file buffer appears as a file tab. Switching buffers inside
 Neovim activates the matching tab and updates the highlighted file in the file explorer. Images
