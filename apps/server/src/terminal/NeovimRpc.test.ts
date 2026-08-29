@@ -259,7 +259,8 @@ it.effect("decodes Neovim RPC responses split across socket chunks", () =>
         expect(luaSources[0]).toContain('vim.api.nvim_create_autocmd("VimEnter"');
         expect(luaSources[0]).toContain('return #listed_file_paths() > 1 and "bdelete" or "q"');
         await client.openFile("/repo/other.ts");
-        expect(luaSources.at(-1)).toContain("vim.api.nvim_buf_get_name(0) ~= path");
+        expect(luaSources.at(-1)).toContain("not same_path(vim.api.nvim_buf_get_name(0), path)");
+        expect(luaSources.at(-1)).toContain("vim.fs.normalize(value)");
         expect(luaSources.at(-1)).toContain("if line == nil");
         expect(luaArguments.at(-1)).toEqual(["/repo/other.ts"]);
         expect(await client.isDirty()).toBe(false);
