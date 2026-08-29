@@ -33,8 +33,23 @@ type IncompleteDecodeError = Error & {
   readonly values?: unknown;
 };
 
+// Buffer names may differ from the server's path in separators (Windows) or
+// letter case (Windows and macOS default filesystems). Compare through
+// vim.fs.normalize with a case fold on the case-insensitive platforms.
+const SAME_PATH_LUA = String.raw`
+local function same_path(left, right)
+  local fold_case = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+  local function fold(value)
+    local normalized = vim.fs.normalize(value)
+    return fold_case and normalized:lower() or normalized
+  end
+  return fold(left) == fold(right)
+end
+`;
+
 const OPEN_FILE_LUA = String.raw`
 local path, line, column = ...
+${SAME_PATH_LUA}
 if vim.fn.filereadable(path) ~= 1 then
   error("T3_FILE_NOT_FOUND:" .. path)
 end
@@ -44,7 +59,7 @@ end
 -- vim.notify instead of the RPC response.
 vim.schedule(function()
   local ok, err = pcall(function()
-    if vim.api.nvim_buf_get_name(0) ~= path then
+    if not same_path(vim.api.nvim_buf_get_name(0), path) then
       local edited, edit_error = pcall(vim.api.nvim_cmd, { cmd = "edit", args = { path } }, {})
       if not edited then
         if string.find(tostring(edit_error), "E37", 1, true) then
@@ -194,8 +209,9 @@ return true
 
 const CLOSE_FILE_LUA = String.raw`
 local path = ...
+${SAME_PATH_LUA}
 for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
-  if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_buf_get_name(buffer) == path then
+  if vim.api.nvim_buf_is_valid(buffer) and same_path(vim.api.nvim_buf_get_name(buffer), path) then
     vim.api.nvim_buf_delete(buffer, { force = true })
     return true
   end
