@@ -280,6 +280,22 @@ export async function createNeovimRpcEndpoint(
   };
 }
 
+/**
+ * Extracts the running Neovim's version from `nvim_get_api_info` metadata.
+ * Returns undefined when the shape is unrecognized so the caller fails open
+ * instead of rejecting future metadata formats.
+ */
+function readNeovimVersion(
+  metadata: unknown,
+): { major: number; minor: number; patch: number } | undefined {
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const version = (metadata as { version?: unknown }).version;
+  if (typeof version !== "object" || version === null) return undefined;
+  const { major, minor, patch } = version as { major?: unknown; minor?: unknown; patch?: unknown };
+  if (typeof major !== "number" || typeof minor !== "number") return undefined;
+  return { major, minor, patch: typeof patch === "number" ? patch : 0 };
+}
+
 export class NeovimRpcClient {
   readonly #socket: NodeNet.Socket;
   readonly #packr = new Packr({ useRecords: false });
@@ -309,6 +325,15 @@ export class NeovimRpcClient {
         throw new Error("Neovim returned an invalid API handshake.");
       }
       const channel = apiInfo[0];
+      // The injected Lua depends on vim.api.nvim_cmd and vim.fs.normalize,
+      // both introduced in Neovim 0.8. Reject older builds here with a clear
+      // message instead of failing cryptically mid-edit.
+      const version = readNeovimVersion(apiInfo[1]);
+      if (version !== undefined && version.major === 0 && version.minor < 8) {
+        throw new Error(
+          `T3 Code requires Neovim 0.8 or newer; found ${version.major}.${version.minor}.${version.patch}.`,
+        );
+      }
       await client.request(
         "nvim_set_client_info",
         ["t3-code", { major: 1 }, "remote", {}, { website: "https://t3.codes" }],
