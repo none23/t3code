@@ -191,7 +191,10 @@ export class EnvironmentInternalError extends Schema.TaggedErrorClass<Environmen
   }
 }
 
-export const EnvironmentResourceNotFoundReason = Schema.Literals(["thread_not_found"]);
+export const EnvironmentResourceNotFoundReason = Schema.Literals([
+  "thread_not_found",
+  "skill_not_found",
+]);
 export type EnvironmentResourceNotFoundReason = typeof EnvironmentResourceNotFoundReason.Type;
 
 export class EnvironmentResourceNotFoundError extends Schema.TaggedErrorClass<EnvironmentResourceNotFoundError>()(
@@ -327,7 +330,7 @@ const EnvironmentOrchestrationSnapshotErrors = [
   EnvironmentScopeRequiredError,
   EnvironmentInternalError,
 ] as const;
-const EnvironmentOrchestrationThreadSnapshotErrors = [
+const EnvironmentResourceReadErrors = [
   EnvironmentScopeRequiredError,
   EnvironmentResourceNotFoundError,
   EnvironmentInternalError,
@@ -525,7 +528,7 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
       params: EnvironmentOrchestrationThreadSnapshotParams,
       payload: EnvironmentOrchestrationThreadSnapshotQuery,
       success: OrchestrationThreadDetailSnapshot,
-      error: EnvironmentOrchestrationThreadSnapshotErrors,
+      error: EnvironmentResourceReadErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
@@ -536,6 +539,34 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
       error: EnvironmentOrchestrationDispatchErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
+
+// Query-string request (GET payloads must encode to strings). `path` is the
+// absolute `SKILL.md` path as reported by a provider snapshot's `skills`
+// list. The server only serves paths it has itself discovered, so this is a
+// lookup key, not a free-form file read.
+const EnvironmentSkillFileQuery = {
+  path: TrimmedNonEmptyString,
+};
+
+export const EnvironmentSkillFileResult = Schema.Struct({
+  content: Schema.String,
+});
+export type EnvironmentSkillFileResult = typeof EnvironmentSkillFileResult.Type;
+
+/**
+ * Skill lists (name, description, path) already ride on every provider
+ * snapshot; this group only serves `SKILL.md` bodies on demand so the
+ * settings UI can show a skill's full instructions without the snapshot
+ * carrying every file's content.
+ */
+export class EnvironmentSkillsHttpApi extends HttpApiGroup.make("skills").add(
+  HttpApiEndpoint.get("skillFile", "/api/skills/file", {
+    headers: OptionalBearerHeaders,
+    payload: EnvironmentSkillFileQuery,
+    success: EnvironmentSkillFileResult,
+    error: EnvironmentResourceReadErrors,
+  }).middleware(EnvironmentAuthenticatedAuth),
+) {}
 
 /** Large, compressible pull-request payloads travel over HTTP rather than the RPC socket. */
 export class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").add(
@@ -618,5 +649,6 @@ export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)
+  .add(EnvironmentSkillsHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
   .add(EnvironmentConnectHttpApi) {}

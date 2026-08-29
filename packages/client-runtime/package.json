@@ -163,6 +163,10 @@
       "types": "./src/state/shell.ts",
       "default": "./src/state/shell.ts"
     },
+    "./state/skill-file": {
+      "types": "./src/state/skillFileHttp.ts",
+      "default": "./src/state/skillFileHttp.ts"
+    },
     "./state/source-control": {
       "types": "./src/state/sourceControl.ts",
       "default": "./src/state/sourceControl.ts"
