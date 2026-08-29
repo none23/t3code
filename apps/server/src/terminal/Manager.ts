@@ -1575,6 +1575,30 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     threadId: string,
     terminalId: string,
   ) {
+    // node-pty's ConPTY layer throws on any signal argument, and its bare
+    // kill() already tears down the whole console tree — there is nothing
+    // gentler to escalate from on Windows.
+    if (platform === "win32") {
+      yield* Effect.try({
+        try: () => process.kill(),
+        catch: (cause) =>
+          new TerminalProcessSignalError({
+            cause,
+            signal: "SIGKILL",
+            terminalPid: process.pid,
+          }),
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("failed to kill terminal process", {
+            threadId,
+            terminalId,
+            cause: error,
+          }),
+        ),
+      );
+      return;
+    }
+
     const terminated = yield* Effect.try({
       try: () => process.kill("SIGTERM"),
       catch: (cause) =>

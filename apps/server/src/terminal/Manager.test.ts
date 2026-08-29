@@ -1792,6 +1792,29 @@ it.layer(
     }).pipe(Effect.provide(TestClock.layer())),
   );
 
+  it.effect("kills Windows terminals with a single signal-less kill", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, {
+        env: {
+          ComSpec: "C:\\Windows\\System32\\cmd.exe",
+          PATH: "C:\\Windows\\System32",
+          SystemRoot: "C:\\Windows",
+        },
+      }).pipe(Effect.provide(withHostPlatform("win32")));
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      yield* manager.close({ threadId: "thread-1" });
+      yield* waitFor(Effect.sync(() => process.killed));
+
+      // node-pty rejects signal arguments on Windows, so the escalation path
+      // must issue exactly one bare kill().
+      expect(process.killSignals).toEqual([undefined]);
+    }),
+  );
+
   it.effect("publishes closed events when terminals are explicitly closed", () =>
     Effect.gen(function* () {
       const { manager, getEvents } = yield* createManager();
