@@ -8,6 +8,7 @@ export type SettingsPath =
   | "/settings/keybindings"
   | "/settings/snap-shot"
   | "/settings/providers"
+  | "/settings/skills"
   | "/settings/integrations"
   | "/settings/source-control"
   | "/settings/connections"
@@ -55,6 +56,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/keybindings": "Keybindings",
   "/settings/snap-shot": "SnapShots",
   "/settings/providers": "Providers",
+  "/settings/skills": "Skills",
   "/settings/integrations": "Integrations",
   "/settings/source-control": "Source Control",
   "/settings/connections": "Connections",
@@ -395,6 +397,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/providers",
     searchTerms: ["refresh availability versions auth state models background probes seconds off"],
     providerSettingsOnly: true,
+  },
+  {
+    id: "skills",
+    title: "Skills",
+    to: "/settings/skills",
   },
   {
     id: "agent-browser-access",
