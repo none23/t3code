@@ -91,6 +91,7 @@ import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValid
 import { useCreateProjectThread } from "./use-project-actions";
 import { resolveDraftProjectSelection } from "./new-task-project-selection";
 import {
+  applyNonGitWorkspaceFallback,
   resolveNewTaskBranchLabel,
   resolveNewTaskWorkspaceLabel,
 } from "./new-task-context-presentation";
@@ -866,10 +867,18 @@ export function NewTaskDraftScreen(props: {
         selectedEnvironmentServerConfig,
         draft.modelSelection ?? null,
       ) ?? flow.selectedModel;
-    const workspaceMode = draft.workspaceSelection?.mode ?? flow.workspaceMode;
-    const selectedBranchName = draft.workspaceSelection?.branch ?? flow.selectedBranchName;
-    const selectedWorktreePath =
-      draft.workspaceSelection?.worktreePath ?? flow.selectedWorktreePath;
+    const workspaceSelection = applyNonGitWorkspaceFallback({
+      selection: draft.workspaceSelection,
+      fallback: {
+        mode: flow.workspaceMode,
+        branch: flow.selectedBranchName,
+        worktreePath: flow.selectedWorktreePath,
+      },
+      isGitRepo: flow.isGitRepo,
+    });
+    const workspaceMode = workspaceSelection.mode;
+    const selectedBranchName = workspaceSelection.branch;
+    const selectedWorktreePath = workspaceSelection.worktreePath;
     const startFromOrigin = draft.workspaceSelection?.startFromOrigin ?? flow.startFromOrigin;
     const runtimeMode = draft.runtimeMode ?? flow.runtimeMode;
     const interactionMode = flow.planModeEnabled
@@ -1158,8 +1167,8 @@ export function NewTaskDraftScreen(props: {
     </View>
   );
 
-  const workspaceControls = (
-    <View className="flex-row items-center gap-1 px-2">
+  const workspaceControls = flow.isGitRepo ? (
+    <View className="flex-row items-center gap-1 px-2 pb-1">
       {flow.submitting && environmentConnected && flow.workspaceMode === "worktree" ? (
         <View
           accessible
@@ -1205,7 +1214,7 @@ export function NewTaskDraftScreen(props: {
         </>
       )}
     </View>
-  );
+  ) : null;
 
   const composerDock = (
     <View className="bg-sheet px-[12px] pt-1" style={{ paddingBottom: controlsBottomPadding }}>
@@ -1219,7 +1228,7 @@ export function NewTaskDraftScreen(props: {
           />
         </View>
       ) : null}
-      <View className="pb-1">{workspaceControls}</View>
+      {workspaceControls}
 
       <ComposerSurface
         style={{

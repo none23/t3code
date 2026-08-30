@@ -1,4 +1,15 @@
+import type { ComposerDraftWorkspaceSelection } from "../../state/use-composer-drafts";
+
 type WorkspaceMode = "local" | "worktree";
+
+export function applyNonGitWorkspaceFallback(input: {
+  readonly selection: ComposerDraftWorkspaceSelection | null | undefined;
+  readonly fallback: ComposerDraftWorkspaceSelection;
+  readonly isGitRepo: boolean;
+}): ComposerDraftWorkspaceSelection {
+  const selection = input.selection ?? input.fallback;
+  return input.isGitRepo ? selection : { mode: "local" as const, branch: null, worktreePath: null };
+}
 
 export function resolveNewTaskWorkspaceLabel(input: {
   readonly workspaceMode: WorkspaceMode;

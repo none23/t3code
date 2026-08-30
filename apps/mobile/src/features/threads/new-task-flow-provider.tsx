@@ -59,7 +59,7 @@ import {
   capturePendingTaskEditorWriteBaseline,
   flushPendingTaskEditorWrite,
 } from "../../state/pending-task-editor-writes";
-import { useDebouncedValue, usePaginatedBranches } from "../../state/queries";
+import { useBranches, useDebouncedValue, usePaginatedBranches } from "../../state/queries";
 import { vcsEnvironment } from "../../state/vcs";
 import {
   flattenQueuedThreadMessages,
@@ -86,6 +86,7 @@ import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
 import { resolvePendingTaskInteractionMode } from "./legacy-plan-mode";
 import { useLegacyPlanModeState } from "./use-legacy-plan-mode-enabled";
 import {
+  applyNonGitWorkspaceFallback,
   resolveNewTaskBranchWorktreePath,
   resolveNewTaskLocalWorkspaceSelection,
 } from "./new-task-context-presentation";
@@ -133,6 +134,7 @@ type NewTaskFlowContextValue = {
   readonly selectedProjectKey: string | null;
   readonly selectedModelKey: string | null;
   readonly workspaceMode: WorkspaceMode;
+  readonly isGitRepo: boolean;
   readonly selectedBranchName: string | null;
   readonly selectedWorktreePath: string | null;
   readonly startFromOrigin: boolean;
@@ -371,6 +373,14 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
   const selectedProjectDraft = useComposerDraft(selectedProjectDraftKey);
   const prompt = selectedProjectDraft.text;
   const attachments = selectedProjectDraft.attachments;
+  // Keep repo capability unfiltered so branch search cannot drop it; unlike
+  // the live status query below, refs also remain available offline.
+  const projectBranches = useBranches({
+    environmentId: selectedProject?.environmentId ?? null,
+    cwd: selectedProject?.workspaceRoot || null,
+  });
+  // Until capability loads, preserve the requested mode rather than silently changing it.
+  const isGitRepo = projectBranches.data?.isRepo ?? true;
   // Default mode until the user picks one explicitly — same resolution web
   // uses for new draft threads: per-project setting, then the repo's
   // checked-in t3.json, then the server's configured default.
@@ -392,6 +402,12 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     projectFile: t3ProjectFileDefaultMode,
     globalDefault: selectedEnvironmentServerConfig?.settings.defaultThreadEnvMode ?? "local",
   });
+  const resolvedWorkspaceSelection = applyNonGitWorkspaceFallback({
+    selection: selectedProjectDraft.workspaceSelection,
+    fallback: { mode: defaultWorkspaceMode, branch: null, worktreePath: null },
+    isGitRepo,
+  });
+  const workspaceMode = resolvedWorkspaceSelection.mode;
   // While unsettled the resolved default is provisional. Nothing may write
   // it into the draft during that window (the auto-branch effect does), or
   // the frozen interim value beats the t3.json default once it loads.
@@ -400,9 +416,8 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     projectSetting: selectedProject?.defaultThreadEnvMode,
     projectFilePending: t3ProjectFileQuery.isPending,
   });
-  const workspaceMode = selectedProjectDraft.workspaceSelection?.mode ?? defaultWorkspaceMode;
-  const selectedBranchName = selectedProjectDraft.workspaceSelection?.branch ?? null;
-  const selectedWorktreePath = selectedProjectDraft.workspaceSelection?.worktreePath ?? null;
+  const selectedBranchName = resolvedWorkspaceSelection.branch;
+  const selectedWorktreePath = resolvedWorkspaceSelection.worktreePath;
   // Keep the user's explicit choice separate from the resolved display value:
   // only the explicit flag is ever written back to the draft, so the resolved
   // value keeps tracking the server setting when the config loads late.
@@ -872,7 +887,11 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       const workspaceSelection = draft.workspaceSelection;
       // Fall back to the resolved mode (server default) so queued tasks drain
       // with the same mode the composer displayed.
-      const mode = workspaceSelection?.mode ?? workspaceMode;
+      const resolvedSelection = applyNonGitWorkspaceFallback({
+        selection: workspaceSelection,
+        fallback: { mode: workspaceMode, branch: null, worktreePath: null },
+        isGitRepo,
+      });
       // When the selection is the stand-in built from the queued snapshot,
       // persist the original (possibly absent) snapshot values — the
       // stand-in's placeholder title/workspaceRoot must never be written back
@@ -903,13 +922,14 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
           projectId: selectedProject.id,
           ...(projectTitle !== undefined ? { projectTitle } : {}),
           ...(projectCwd !== undefined ? { projectCwd } : {}),
-          workspaceMode: mode,
+          workspaceMode: resolvedSelection.mode,
           // Only an explicit picker choice, never the current checkout: a
           // queued local task drains days later against whatever is checked
           // out then, so recording a queue-time guess would pin a stale label
           // to a thread that ran somewhere else.
-          branch: workspaceSelection?.branch ?? null,
-          worktreePath: mode === "worktree" ? null : (workspaceSelection?.worktreePath ?? null),
+          branch: resolvedSelection.branch,
+          worktreePath:
+            resolvedSelection.mode === "worktree" ? null : resolvedSelection.worktreePath,
           // The draft only carries the flag when the user touched it; fall
           // back to the resolved default (server settings) so queued tasks
           // drain with the same origin mode the composer displayed.
@@ -923,6 +943,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     [
       editingPendingProject,
       editingPendingTask,
+      isGitRepo,
       selectedEnvironmentServerConfig,
       selectedModel,
       selectedProject,
@@ -1043,6 +1064,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectedProjectKey,
       selectedModelKey,
       workspaceMode,
+      isGitRepo,
       selectedBranchName,
       selectedWorktreePath,
       startFromOrigin,
@@ -1112,6 +1134,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       filteredBranches,
       finishEditingPendingTask,
       interactionMode,
+      isGitRepo,
       planModeEnabled,
       loadBranches,
       loadMoreBranches,
