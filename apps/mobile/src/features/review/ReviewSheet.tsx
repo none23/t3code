@@ -775,6 +775,7 @@ export function ReviewSheet(props: ReviewSheetProps) {
               connection={
                 environment.presentation?.connection ?? {
                   phase: "available",
+                  reachability: "pending",
                   error: null,
                   traceId: null,
                 }

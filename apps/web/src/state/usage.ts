@@ -7,6 +7,7 @@
  * @module state/usage
  */
 import { useAtomValue } from "@effect/atom-react";
+import { isEnvironmentRequestPending } from "@t3tools/client-runtime/connection";
 import {
   USAGE_CONTRACT_VERSION,
   type EnvironmentId,
@@ -45,12 +46,17 @@ const usageByWindowAtom = Atom.family((windowKey: string) =>
     const statuses: EnvironmentUsageStatus[] = [];
     for (const [environmentId, presentation] of presentations) {
       const result = get(serverEnvironment.usageSummary({ environmentId, input }));
+      const summary = Option.getOrNull(AsyncResult.value(result));
+      const unreachable = presentation.connection.reachability === "unreachable";
       statuses.push({
         environmentId,
         label: presentation.entry.target.label,
-        isPending: result.waiting,
-        error: result._tag === "Failure" ? "This environment could not report usage." : null,
-        summary: Option.getOrNull(AsyncResult.value(result)),
+        isPending: isEnvironmentRequestPending(result.waiting, unreachable),
+        error:
+          result._tag === "Failure" || (summary === null && unreachable)
+            ? "This environment could not report usage."
+            : null,
+        summary,
       });
     }
     return statuses;

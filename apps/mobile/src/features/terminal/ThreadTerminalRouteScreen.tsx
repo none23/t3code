@@ -1209,6 +1209,7 @@ export function ThreadTerminalRouteScreen(props: ThreadTerminalRouteScreenProps)
             connection={
               environment.presentation?.connection ?? {
                 phase: "available",
+                reachability: "pending",
                 error: null,
                 traceId: null,
               }

@@ -7,7 +7,7 @@ function connection(
   phase: EnvironmentConnectionPresentation["phase"],
   error: string | null = null,
 ): EnvironmentConnectionPresentation {
-  return { phase, error, traceId: null };
+  return { phase, reachability: "pending", error, traceId: null };
 }
 
 describe("saved cloud environment connection presentation", () => {

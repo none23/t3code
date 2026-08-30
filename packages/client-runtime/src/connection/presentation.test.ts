@@ -13,6 +13,7 @@ import {
   connectionPhaseMessage,
   connectionStatusText,
   connectionStatusTitle,
+  isEnvironmentRequestPending,
   presentEnvironmentConnection,
   presentConnectionState,
 } from "./presentation.ts";
@@ -58,6 +59,7 @@ describe("connection presentation", () => {
   it("distinguishes initial connection, reconnect, and retry errors", () => {
     expect(presentConnectionState(supervisorState({ phase: "connecting", attempt: 1 }))).toEqual({
       phase: "connecting",
+      reachability: "pending",
       error: null,
       traceId: null,
     });
@@ -75,6 +77,7 @@ describe("connection presentation", () => {
       ),
     ).toEqual({
       phase: "reconnecting",
+      reachability: "pending",
       error: "Socket closed.",
       traceId: "trace-previous",
     });
@@ -93,18 +96,19 @@ describe("connection presentation", () => {
       ),
     ).toEqual({
       phase: "reconnecting",
+      reachability: "pending",
       error: "Disconnected.",
       traceId: "trace-1",
     });
   });
 
-  it("preserves the latest failure while the next attempt is active", () => {
+  it("marks repeated attempts unavailable while preserving the latest failure", () => {
     expect(
       presentEnvironmentConnection(
         supervisorState({
           phase: "connecting",
           stage: "opening",
-          attempt: 2,
+          attempt: 3,
           lastFailure: new ConnectionTransientError({
             reason: "transport",
             detail: "Relay connection timed out.",
@@ -114,9 +118,11 @@ describe("connection presentation", () => {
       ),
     ).toEqual({
       phase: "reconnecting",
+      reachability: "unreachable",
       error: "Relay connection timed out.",
       traceId: "trace-retry",
     });
+    expect(isEnvironmentRequestPending(true, true)).toBe(false);
   });
 
   it("gives offline status precedence in global messaging", () => {
@@ -146,6 +152,7 @@ describe("connection presentation", () => {
       ),
     ).toEqual({
       phase: "offline",
+      reachability: "pending",
       error: null,
       traceId: null,
     });
@@ -162,6 +169,7 @@ describe("connection presentation", () => {
       ),
     ).toEqual({
       phase: "connected",
+      reachability: "reachable",
       error: null,
       traceId: null,
     });
@@ -180,6 +188,7 @@ describe("connection presentation", () => {
       ),
     ).toEqual({
       phase: "available",
+      reachability: "pending",
       error: null,
       traceId: null,
     });

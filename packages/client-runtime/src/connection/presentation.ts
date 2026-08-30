@@ -4,6 +4,9 @@ import * as Option from "effect/Option";
 import type { ConnectionCatalogEntry } from "./catalog.ts";
 import type { NetworkStatus, SupervisorConnectionState } from "./model.ts";
 
+// The initial attempt and first retry can take about 37 seconds with backoff.
+const MAX_PENDING_CONNECTION_ATTEMPTS = 2;
+
 export type EnvironmentConnectionPhase =
   | "available"
   | "offline"
@@ -14,6 +17,7 @@ export type EnvironmentConnectionPhase =
 
 export interface EnvironmentConnectionPresentation {
   readonly phase: EnvironmentConnectionPhase;
+  readonly reachability: "pending" | "reachable" | "unreachable";
   readonly error: string | null;
   readonly traceId: string | null;
 }
@@ -24,38 +28,49 @@ export interface EnvironmentPresentation {
   readonly serverConfig: ServerConfig | null;
 }
 
+type ConnectionStatusPresentation = Omit<EnvironmentConnectionPresentation, "reachability">;
+
+export function isEnvironmentRequestPending(waiting: boolean, unreachable: boolean): boolean {
+  return waiting && !unreachable;
+}
+
 export function presentConnectionState(
   state: SupervisorConnectionState,
 ): EnvironmentConnectionPresentation {
+  const retryGraceExpired =
+    state.attempt > MAX_PENDING_CONNECTION_ATTEMPTS && state.lastFailure !== null;
   switch (state.phase) {
     case "available":
-      return { phase: "available", error: null, traceId: null };
+      return { phase: "available", reachability: "pending", error: null, traceId: null };
     case "offline":
-      return { phase: "offline", error: null, traceId: null };
+      return { phase: "offline", reachability: "pending", error: null, traceId: null };
     case "connecting":
       return {
         phase: state.attempt <= 1 && state.lastFailure === null ? "connecting" : "reconnecting",
+        reachability: retryGraceExpired ? "unreachable" : "pending",
         error: state.lastFailure?.message ?? null,
         traceId: state.lastFailure?.traceId ?? null,
       };
     case "connected":
-      return { phase: "connected", error: null, traceId: null };
+      return { phase: "connected", reachability: "reachable", error: null, traceId: null };
     case "backoff":
       return {
         phase: "reconnecting",
+        reachability: retryGraceExpired ? "unreachable" : "pending",
         error: state.lastFailure?.message ?? null,
         traceId: state.lastFailure?.traceId ?? null,
       };
     case "blocked":
       return {
         phase: "error",
+        reachability: "unreachable",
         error: state.lastFailure?.message ?? null,
         traceId: state.lastFailure?.traceId ?? null,
       };
   }
 }
 
-export function connectionStatusText(connection: EnvironmentConnectionPresentation): string {
+export function connectionStatusText(connection: ConnectionStatusPresentation): string {
   switch (connection.phase) {
     case "available":
       return "Available";
@@ -76,7 +91,7 @@ export function connectionStatusText(connection: EnvironmentConnectionPresentati
   }
 }
 
-export function connectionStatusTitle(connection: EnvironmentConnectionPresentation): string {
+export function connectionStatusTitle(connection: ConnectionStatusPresentation): string {
   if (connection.phase === "reconnecting" && connection.error) {
     return "Failed to connect. Reconnecting...";
   }
