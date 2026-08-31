@@ -155,6 +155,24 @@ describe("UsagePage hourly breakdown", () => {
   });
 });
 
+describe("UsagePage partial coverage", () => {
+  it("renders answered totals while another environment is still scanning", () => {
+    testState.useUsage.mockReturnValue({
+      ...testState.useUsage(),
+      environments: [
+        { environmentId: "desk", label: "Desk", isPending: false, error: null, summary: {} },
+        { environmentId: "asleep", label: "Laptop", isPending: true, error: null, summary: null },
+      ],
+      isPartial: true,
+    });
+
+    const markup = renderToStaticMarkup(<UsagePage />);
+
+    expect(markup).toContain("Laptop hasn&#x27;t reported yet");
+    expect(markup).toContain("$13.00");
+  });
+});
+
 describe("UsagePage model breakdown", () => {
   it("sorts models by cost when the cost metric is selected", () => {
     testState.breakdown = "model";

@@ -1,5 +1,5 @@
 import type { UsageProviderKind } from "@t3tools/contracts";
-import { CheckIcon, RefreshCwIcon, XIcon } from "lucide-react";
+import { RefreshCwIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
@@ -50,12 +50,12 @@ export function UsagePage() {
   const [breakdown, setBreakdown] = useState<"model" | "time">("model");
   const { days: windowDays, window } = windowSelection;
   const isPast24Hours = windowDays === 1;
-  const { merged, environments, isPending, isPartial, refresh } = useUsage(window);
+  const { merged, environments, isPending, refresh } = useUsage(window);
 
-  // Hold the content until every environment is terminal. Rendering merged
-  // totals while devices are still answering makes every number on the page
-  // jump as each one lands.
-  const settling = isPending || isPartial;
+  // Hold the content only until the first environment answers. An unreachable
+  // environment can stay pending indefinitely, so once any device has answered
+  // the page renders its totals and the coverage notice names the stragglers.
+  const settling = isPending;
 
   const days = useMemo(
     () => enumerateDays(window.sinceDay, window.untilDay),
@@ -209,10 +209,7 @@ export function UsagePage() {
         <ScrollArea className="min-h-0 flex-1">
           <WorkspacePageContainer width="wide">
             {settling ? (
-              <>
-                {environments.length > 1 ? <UsageDeviceStrip environments={environments} /> : null}
-                <UsageSkeleton />
-              </>
+              <UsageSkeleton />
             ) : (
               <>
                 <UsageCoverageNotice
@@ -486,10 +483,9 @@ function Metric({ label, value }: { readonly label: string; readonly value: stri
 }
 
 /**
- * Says plainly when the totals are incomplete: an environment that failed, or
- * one whose transcripts another environment already reported. Environments
- * that are still answering never reach this notice; the page shows the
- * loading skeleton until every one is terminal.
+ * Says plainly when the totals are incomplete: an environment that is still
+ * answering (possibly forever, if it is unreachable), one that failed, or one
+ * whose transcripts another environment already reported.
  */
 function UsageCoverageNotice({
   environments,
@@ -500,16 +496,29 @@ function UsageCoverageNotice({
   readonly duplicateSources: readonly string[];
   readonly staleEnvironments: readonly string[];
 }) {
+  const scanning = environments.filter(
+    (environment) => environment.summary === null && environment.error === null,
+  );
   const failed = environments.filter((environment) => environment.error !== null);
   const stale = environments.filter((environment) =>
     staleEnvironments.includes(environment.environmentId),
   );
-  if (failed.length === 0 && stale.length === 0 && duplicateSources.length === 0) {
+  if (
+    scanning.length === 0 &&
+    failed.length === 0 &&
+    stale.length === 0 &&
+    duplicateSources.length === 0
+  ) {
     return null;
   }
 
   return (
     <div className="flex flex-col gap-1 border border-border px-3 py-2 text-xs text-muted-foreground">
+      {scanning.map((environment) => (
+        <span key={environment.label}>
+          {environment.label} hasn&apos;t reported yet — totals are partial.
+        </span>
+      ))}
       {failed.map((environment) => (
         <span key={environment.label}>{environment.label} could not report usage.</span>
       ))}
@@ -524,62 +533,6 @@ function UsageCoverageNotice({
           {duplicateSources.join(", ")}
         </span>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * Per-device progress while the page waits for every environment to answer.
- * Only rendered with two or more devices; a lone device has nothing to
- * enumerate.
- */
-function UsageDeviceStrip({
-  environments,
-}: {
-  readonly environments: readonly EnvironmentUsageStatus[];
-}) {
-  const scanning = environments.filter(
-    (environment) => environment.summary === null && environment.error === null,
-  );
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border border-border px-3 py-2 text-xs">
-      {environments.map((environment) => {
-        if (environment.summary !== null) {
-          return (
-            <span
-              key={environment.environmentId}
-              className="flex items-center gap-1 text-foreground"
-            >
-              <CheckIcon className="size-3 text-emerald-600 dark:text-emerald-300/90" aria-hidden />
-              {environment.label}
-            </span>
-          );
-        }
-        if (environment.error !== null) {
-          return (
-            <span
-              key={environment.environmentId}
-              className="flex items-center gap-1 text-destructive"
-            >
-              <XIcon className="size-3" aria-hidden />
-              {environment.label}
-            </span>
-          );
-        }
-        return (
-          <span
-            key={environment.environmentId}
-            className="animate-status-pulse text-muted-foreground"
-          >
-            {environment.label}…
-          </span>
-        );
-      })}
-      <span className="ms-auto text-muted-foreground">
-        {scanning.length === 1
-          ? "1 device still scanning"
-          : `${scanning.length} devices still scanning`}
-      </span>
     </div>
   );
 }
