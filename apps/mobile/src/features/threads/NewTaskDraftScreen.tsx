@@ -943,12 +943,17 @@ export function NewTaskDraftScreen(props: {
         clearWorkspaceSelection: true,
       });
     }
-    navigation.dispatch(
-      StackActions.replace("Thread", {
-        environmentId: String(result.value.environmentId),
-        threadId: String(result.value.threadId),
-      }),
-    );
+    // Let usePreventRemove commit its disabled state (submitting just went
+    // false) before replacing this route, otherwise the guard swallows the
+    // navigation and the user is stranded on a cleared form.
+    requestAnimationFrame(() => {
+      navigation.dispatch(
+        StackActions.replace("Thread", {
+          environmentId: String(result.value.environmentId),
+          threadId: String(result.value.threadId),
+        }),
+      );
+    });
   }
 
   if (!selectedProject) {
