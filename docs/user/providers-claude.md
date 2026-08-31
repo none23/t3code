@@ -34,6 +34,26 @@ When you set this field, T3 Code points Claude Code at that directory with the
 `CLAUDE_CONFIG_DIR` environment variable. It does not change `HOME`, so your system keychain and
 the rest of your environment stay as they are.
 
+## Claude Says It Is Not Authenticated
+
+If Claude Code is logged out or its session expired, the provider shows **Not authenticated** in
+Settings and sending a message fails right away with a login hint, instead of ending in an empty
+reply.
+
+Log in from a terminal:
+
+```bash
+claude auth login
+```
+
+If the provider has a `CLAUDE_CONFIG_DIR path` set, log in to that same directory:
+
+```bash
+CLAUDE_CONFIG_DIR=~/.claude_personal_home claude auth login
+```
+
+Then send your message again.
+
 ## Reduce Context Usage
 
 In Settings, open your Claude provider and set **Auto-compact after** to a token count between

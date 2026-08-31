@@ -1822,6 +1822,78 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("fails the turn with a login hint when the CLI reports authentication_failed", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.takeUntil((event) => event.type === "turn.completed"),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+
+      const turn = yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "hello",
+        attachments: [],
+      });
+
+      // Exact shape a signed-out CLI emits: a synthetic assistant message
+      // carrying `error`, then a result whose subtype is "success" with
+      // is_error: true.
+      harness.query.emit({
+        type: "assistant",
+        session_id: "sdk-session-auth",
+        uuid: "assistant-auth",
+        parent_tool_use_id: null,
+        error: "authentication_failed",
+        is_api_error_message: true,
+        message: {
+          id: "assistant-message-auth",
+          model: "<synthetic>",
+          content: [{ type: "text", text: "Not logged in · Please run /login" }],
+        },
+      } as unknown as SDKMessage);
+
+      harness.query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: true,
+        terminal_reason: "api_error",
+        errors: [],
+        session_id: "sdk-session-auth",
+        uuid: "result-auth",
+      } as unknown as SDKMessage);
+
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+
+      const runtimeError = runtimeEvents.find((event) => event.type === "runtime.error");
+      assert.equal(runtimeError?.type, "runtime.error");
+      if (runtimeError?.type === "runtime.error") {
+        assert.match(runtimeError.payload.message, /claude auth login/);
+        assert.match(runtimeError.payload.message, /Not logged in/);
+      }
+
+      const turnCompleted = runtimeEvents[runtimeEvents.length - 1];
+      assert.equal(turnCompleted?.type, "turn.completed");
+      if (turnCompleted?.type === "turn.completed") {
+        assert.equal(String(turnCompleted.turnId), String(turn.turnId));
+        assert.equal(turnCompleted.payload.state, "failed");
+        assert.match(turnCompleted.payload.errorMessage ?? "", /claude auth login/);
+      }
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("treats aborted_tools results as interrupted and hides ede_diagnostic errors", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
