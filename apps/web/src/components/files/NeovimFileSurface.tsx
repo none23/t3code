@@ -3,6 +3,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { terminalOutputText } from "@t3tools/client-runtime/state/terminal";
 import { NEOVIM_TERMINAL_ID, type EnvironmentId, type ScopedThreadRef } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
@@ -86,10 +87,11 @@ function NeovimTerminal({
     environmentId,
     terminal: attachInput,
   });
+  const buffer = terminalOutputText(session.output);
   // The attach snapshot can arrive while Ghostty is still loading its WASM and fonts.
   // Creation must replay that newest buffer, not the empty buffer from its first render.
-  const latestBufferRef = useRef(session.buffer);
-  latestBufferRef.current = session.buffer;
+  const latestBufferRef = useRef(buffer);
+  latestBufferRef.current = buffer;
   // Start from the session's current versions so a remount does not replay
   // write/file notifications that were already handled.
   const handledWrittenVersionRef = useRef(session.writtenVersion);
@@ -211,10 +213,10 @@ function NeovimTerminal({
     const terminal = terminalRef.current;
     if (!terminal) return;
     const previous = previousBufferRef.current;
-    if (session.buffer.startsWith(previous)) terminal.write(session.buffer.slice(previous.length));
-    else terminal.resetAndWrite(session.buffer);
-    previousBufferRef.current = session.buffer;
-  }, [session.buffer, session.version]);
+    if (buffer.startsWith(previous)) terminal.write(buffer.slice(previous.length));
+    else terminal.resetAndWrite(buffer);
+    previousBufferRef.current = buffer;
+  }, [buffer, session.version]);
 
   useEffect(() => {
     terminalRef.current?.focus();
