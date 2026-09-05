@@ -30,12 +30,14 @@ import {
 import {
   type DesktopWslState,
   type EnvironmentId,
+  type EnvironmentMachineKind,
   type FilesystemBrowseResult,
   type ProjectId,
   type SourceControlDiscoveryResult,
   type SourceControlProviderKind,
   type SourceControlRepositoryInfo,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
+  resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
@@ -48,7 +50,6 @@ import {
   LinkIcon,
   MessageSquareIcon,
   PaletteIcon,
-  ServerIcon,
   SettingsIcon,
   SquarePenIcon,
   TextSearchIcon,
@@ -145,6 +146,7 @@ import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteContent } from "./CommandPaletteContent";
 import { CommandPaletteResults } from "./CommandPaletteResults";
 import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
@@ -205,6 +207,7 @@ function getEnvironmentBrowsePlatform(os: string | null | undefined): string {
 interface AddProjectEnvironmentOption {
   readonly environmentId: EnvironmentId;
   readonly label: string;
+  readonly machine: EnvironmentMachineKind;
   readonly isPrimary: boolean;
   readonly isConnected: boolean;
   readonly status: string;
@@ -505,7 +508,10 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           setOpen(open);
         }}
       >
-        {children}
+        {/* Block background focus calls for the entire time the palette is open. */}
+        <div className="contents" inert={state.open}>
+          {children}
+        </div>
         <CommandPaletteDialog
           mode={state.mode}
           openIntent={state.openIntent}
@@ -738,6 +744,7 @@ function OpenCommandPaletteDialog(props: {
                 : isLocal
                   ? `${environment.label} (Local)`
                   : environment.label,
+              machine: resolveEnvironmentMachineKind(environment.serverConfig),
             },
           ] as const;
         }),
@@ -831,6 +838,7 @@ function OpenCommandPaletteDialog(props: {
           runtimeLabel: environment.label,
         }),
         isPrimary,
+        machine: resolveEnvironmentMachineKind(environment.serverConfig),
         isConnected: canCreateProjectInEnvironment(environment.connection.phase),
         status: connectionStatusText(environment.connection),
       };
@@ -1119,12 +1127,17 @@ function OpenCommandPaletteDialog(props: {
             const location = projectEnvironmentLocationById.get(project.environmentId) ?? {
               kind: "remote",
               label: "Remote",
+              machine: "server" as const,
             };
             return (
               <span className="flex min-w-0 items-center gap-1">
                 <span className="inline-flex min-w-0 items-center gap-1">
                   {location.kind === "remote" ? (
-                    <ServerIcon aria-hidden className={COMMAND_PALETTE_META_ICON_CLASS} />
+                    <EnvironmentMachineIcon
+                      aria-hidden
+                      kind={location.machine}
+                      className={COMMAND_PALETTE_META_ICON_CLASS}
+                    />
                   ) : null}
                   <span className="truncate">{location.label}</span>
                 </span>
@@ -1471,7 +1484,7 @@ function OpenCommandPaletteDialog(props: {
           : option.environmentId
         : option.status,
       disabled: !option.isConnected,
-      icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+      icon: <EnvironmentMachineIcon kind={option.machine} className={ITEM_ICON_CLASS} />,
       keepOpen: true,
       run: async () => {
         startAddProjectSourceSelection(option.environmentId);
@@ -2279,15 +2292,15 @@ function OpenCommandPaletteDialog(props: {
       context: { modelPickerOpen: false },
     });
     if (threadJumpIndexFromCommand(command ?? "") !== null) {
+      event.preventDefault();
+      event.stopPropagation();
       const matchingItem = displayedGroups
         .flatMap((group) => group.items)
         .find((item) => item.shortcutCommand === command);
       if (matchingItem) {
-        event.preventDefault();
-        event.stopPropagation();
         executeItem(matchingItem);
-        return;
       }
+      return;
     }
     if (command === "thread.copyReference" && activeThreadReferenceCopyTarget !== null) {
       event.preventDefault();
