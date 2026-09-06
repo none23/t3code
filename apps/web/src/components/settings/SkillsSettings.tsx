@@ -1,5 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, ProviderDriverKind, ServerProviderSkill } from "@t3tools/contracts";
+import {
+  PROVIDER_DISPLAY_NAMES,
+  type EnvironmentId,
+  type ProviderDriverKind,
+  type ServerProviderSkill,
+} from "@t3tools/contracts";
 import { fetchEnvironmentSkillFile } from "@t3tools/client-runtime/state/skill-file";
 import * as Option from "effect/Option";
 import { CheckIcon, ChevronRightIcon, CopyIcon, RefreshCwIcon, SparklesIcon } from "lucide-react";
@@ -8,7 +13,6 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { cn } from "../../lib/utils";
 import { runtime } from "../../lib/runtime";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { PROVIDER_OPTIONS } from "../../session-logic";
 import { type EnvironmentPresentation, useEnvironments } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
 import { usePreparedConnection } from "../../state/session";
@@ -35,7 +39,7 @@ import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
 function labelForDriver(driver: ProviderDriverKind): string | undefined {
-  return PROVIDER_OPTIONS.find((option) => option.value === driver)?.label;
+  return PROVIDER_DISPLAY_NAMES[driver];
 }
 
 /** Chevron that points right when collapsed and down when open. */

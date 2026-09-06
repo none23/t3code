@@ -49,7 +49,6 @@ import { buildFileReviewComment } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
-import { projectEnvironment } from "~/state/projects";
 import { vcsEnvironment } from "~/state/vcs";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
@@ -1005,8 +1004,7 @@ export default function FilePreviewPanel({
   // A file outside the workspace (an absolute path) is shown, never edited.
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
-  const useNeovim =
-    attachment === undefined && neovimEnabled && !isMedia && !isPdf && !isHostFile;
+  const useNeovim = attachment === undefined && neovimEnabled && !isMedia && !isPdf && !isHostFile;
   const file = useProjectFileQuery(
     environmentId,
     cwd,

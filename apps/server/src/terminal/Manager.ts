@@ -1928,7 +1928,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     threadId: string,
     terminalId: string,
   ) {
-    if (terminalId === NEOVIM_TERMINAL_ID) return "";
+    if (terminalId === NEOVIM_TERMINAL_ID) {
+      return new BoundedTerminalHistory(historyLineLimit, "", NEOVIM_HISTORY_BYTE_LIMIT);
+    }
     const nextPath = historyPath(threadId, terminalId);
     if (
       yield* fileSystem.exists(nextPath).pipe(
@@ -3398,11 +3400,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             kind: "neovim",
-            history: new BoundedTerminalHistory(
-              historyLineLimit,
-              "",
-              NEOVIM_HISTORY_BYTE_LIMIT,
-            ),
+            history: new BoundedTerminalHistory(historyLineLimit, "", NEOVIM_HISTORY_BYTE_LIMIT),
             cols,
             rows,
             env: input.env,
