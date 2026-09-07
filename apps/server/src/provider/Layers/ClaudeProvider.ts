@@ -562,14 +562,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   }
 
   // A logged-out first-party CLI still initializes, reporting tokenSource
-  // "none" and no API key (the SDK spells that either as a missing
-  // apiKeySource or as "none"). API-key setups share the tokenSource but name
-  // their key source, so they stay authenticated.
-  const hasApiKey = Boolean(capabilities.apiKeySource) && capabilities.apiKeySource !== "none";
+  // "none" and no apiKeySource. API-key setups share the tokenSource but the
+  // CLI names their key source, so they stay authenticated.
   if (
     capabilities.apiProvider === "firstParty" &&
     capabilities.tokenSource === "none" &&
-    !hasApiKey
+    !capabilities.apiKeySource
   ) {
     const path = yield* Path.Path;
     const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, resolvedEnvironment);
