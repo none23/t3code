@@ -561,12 +561,10 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
   }
 
-  // A logged-out first-party CLI still initializes and reports tokenSource
-  // "none" with no API key: apiKeySource is absent on current CLIs, and the
-  // SDK documents "none" for the same state. Only that combination counts as
-  // logged out: API-key setups report tokenSource "none" too but name their
-  // key source, and external-auth backends (Bedrock, Vertex, gateways) and
-  // older CLIs that omit tokenSource keep their current status.
+  // A logged-out first-party CLI still initializes, reporting tokenSource
+  // "none" and no API key (the SDK spells that either as a missing
+  // apiKeySource or as "none"). API-key setups share the tokenSource but name
+  // their key source, so they stay authenticated.
   const hasApiKey = Boolean(capabilities.apiKeySource) && capabilities.apiKeySource !== "none";
   if (
     capabilities.apiProvider === "firstParty" &&
