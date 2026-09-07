@@ -33,7 +33,7 @@ import {
   type ServerProviderDraft,
 } from "../providerSnapshot.ts";
 import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
-import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
+import { claudeSignedOutMessage, makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import { discoverClaudeSkills } from "../Drivers/ClaudeSkills.ts";
 import { makeUnavailableUsageLimits } from "../providerUsageLimits.ts";
 import {
@@ -228,6 +228,11 @@ type ClaudeCapabilitiesProbe = {
   readonly subscriptionType: string | undefined;
   readonly tokenSource: string | undefined;
   /**
+   * Where an API key came from (e.g. "ANTHROPIC_API_KEY"), reported by the
+   * CLI alongside `tokenSource: "none"` for key-based first-party auth.
+   */
+  readonly apiKeySource: string | undefined;
+  /**
    * Active API backend reported by the SDK's `AccountInfo`. Anthropic OAuth
    * login only applies when `"firstParty"`; for Amazon Bedrock (`"bedrock"`)
    * the subscription/token fields are absent and auth is external AWS creds.
@@ -376,6 +381,7 @@ const probeClaudeCapabilities = (
               readonly email?: string;
               readonly subscriptionType?: string;
               readonly tokenSource?: string;
+              readonly apiKeySource?: string;
               readonly apiProvider?: string;
             }
           | undefined;
@@ -383,6 +389,7 @@ const probeClaudeCapabilities = (
           email: account?.email,
           subscriptionType: account?.subscriptionType,
           tokenSource: account?.tokenSource,
+          apiKeySource: account?.apiKeySource,
           apiProvider: account?.apiProvider,
           slashCommands: parseClaudeInitializationCommands(init.commands),
           ...(usage ? { usage } : {}),
@@ -550,6 +557,38 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         status: "warning",
         auth: { status: "unknown" },
         message: "Could not verify Claude authentication status from initialization result.",
+      },
+    });
+  }
+
+  // A logged-out first-party CLI still initializes and reports tokenSource
+  // "none" with no apiKeySource. Only that explicit combination counts as
+  // logged out: API-key setups report tokenSource "none" too but carry an
+  // apiKeySource, and external-auth backends (Bedrock, Vertex, gateways) and
+  // older CLIs that omit tokenSource keep their current status.
+  if (
+    capabilities.apiProvider === "firstParty" &&
+    capabilities.tokenSource === "none" &&
+    !capabilities.apiKeySource
+  ) {
+    const path = yield* Path.Path;
+    const claudeEnvironment = yield* makeClaudeEnvironment(claudeSettings, resolvedEnvironment);
+    return buildServerProvider({
+      presentation: CLAUDE_PRESENTATION,
+      enabled: claudeSettings.enabled,
+      checkedAt,
+      models,
+      slashCommands: dedupedSlashCommands,
+      skills,
+      probe: {
+        installed: true,
+        version: parsedVersion,
+        status: "error",
+        auth: { status: "unauthenticated" },
+        message: claudeSignedOutMessage({
+          configDir: claudeEnvironment.CLAUDE_CONFIG_DIR,
+          cwd: path.resolve(cwd ?? "."),
+        }),
       },
     });
   }
