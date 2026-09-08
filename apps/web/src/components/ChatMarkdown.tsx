@@ -121,6 +121,7 @@ import { resolveDiffThemeName, type DiffThemeName } from "../lib/diffRendering";
 import { fnv1a32 } from "../lib/diffRendering";
 import { LRUCache } from "../lib/lruCache";
 import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
+import { renderMermaidDiagram } from "../lib/mermaidRendering";
 import { GitHubIcon } from "./Icons";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { useTheme } from "../hooks/useTheme";
@@ -888,12 +889,14 @@ function MarkdownCodeBlock({
   fenceTitle,
   theme,
   children,
+  allowWrap = true,
 }: {
   code: string;
   language: string;
   fenceTitle: string | null;
   theme: "light" | "dark";
   children: ReactNode;
+  allowWrap?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [wrapped, setWrapped] = useState(readInitialWordWrapSetting);
@@ -954,24 +957,26 @@ function MarkdownCodeBlock({
           />
         </span>
         <span className="flex items-center gap-0.5" role="toolbar" aria-label="Code block actions">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="chat-markdown-chrome-action"
-                  aria-pressed={wrapped}
-                  onClick={() => setWrapped((value) => !value)}
-                  aria-label={wrapLabel}
-                />
-              }
-            >
-              <WrapTextIcon className="size-3" />
-            </TooltipTrigger>
-            <TooltipPopup side="top">{wrapLabel}</TooltipPopup>
-          </Tooltip>
+          {allowWrap ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="chat-markdown-chrome-action"
+                    aria-pressed={wrapped}
+                    onClick={() => setWrapped((value) => !value)}
+                    aria-label={wrapLabel}
+                  />
+                }
+              >
+                <WrapTextIcon className="size-3" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">{wrapLabel}</TooltipPopup>
+            </Tooltip>
+          ) : null}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -993,6 +998,46 @@ function MarkdownCodeBlock({
       </div>
       {children}
     </div>
+  );
+}
+
+function MermaidDiagram({
+  source,
+  theme,
+  fallback,
+}: {
+  source: string;
+  theme: "light" | "dark";
+  fallback: ReactNode;
+}) {
+  const [svg, setSvg] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void renderMermaidDiagram(source, theme).then(
+      (renderedSvg) => {
+        if (active) setSvg(renderedSvg);
+      },
+      (cause) => {
+        console.warn("Mermaid diagram rendering failed; showing its source.", cause);
+        if (active) setFailed(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [source, theme]);
+
+  if (svg === null || failed) return fallback;
+  return (
+    <div
+      role="img"
+      aria-label="Mermaid diagram"
+      className="overflow-auto bg-background p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+      data-mermaid-diagram=""
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
   );
 }
 
@@ -3063,6 +3108,25 @@ const CHAT_MARKDOWN_COMPONENTS = {
 
     const language = extractFenceLanguage(codeBlock.className);
     const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
+    if (language === "mermaid" && !isStreaming) {
+      const fallback = <pre {...props}>{children}</pre>;
+      return (
+        <MarkdownCodeBlock
+          code={codeBlock.code}
+          language={language}
+          fenceTitle={fenceTitle}
+          theme={resolvedTheme}
+          allowWrap={false}
+        >
+          <MermaidDiagram
+            key={`${resolvedTheme}\0${codeBlock.code}`}
+            source={codeBlock.code}
+            theme={resolvedTheme}
+            fallback={fallback}
+          />
+        </MarkdownCodeBlock>
+      );
+    }
     return (
       <MarkdownCodeBlock
         code={codeBlock.code}

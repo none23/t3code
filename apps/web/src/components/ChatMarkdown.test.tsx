@@ -9,6 +9,12 @@ import { GitHubIcon } from "./Icons";
 import { Button } from "./ui/button";
 import { setMarkdownTaskChecked } from "./files/filePreviewMode";
 
+const mermaidMocks = vi.hoisted(() => ({
+  renderMermaidDiagram: vi.fn<(source: string, theme: "light" | "dark") => Promise<string>>(),
+}));
+
+vi.mock("../lib/mermaidRendering", () => mermaidMocks);
+
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
 vi.mock("../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
 vi.mock("../hooks/useSettings", async (importOriginal) => {
@@ -110,6 +116,43 @@ describe("ChatMarkdown favicon privacy", () => {
 });
 
 describe("ChatMarkdown streaming", () => {
+  it("waits for streaming to finish before rendering a Mermaid fence", async () => {
+    mermaidMocks.renderMermaidDiagram.mockResolvedValueOnce(
+      '<svg viewBox="0 0 10 10"><title>Diagram</title></svg>',
+    );
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    let renderer: ReactTestRenderer | undefined;
+    const text = "```mermaid\ngraph TD\n  A --> B\n```";
+
+    try {
+      await act(async () => {
+        renderer = create(<ChatMarkdown cwd="/tmp/project" text={text} isStreaming />);
+      });
+      expect(mermaidMocks.renderMermaidDiagram).not.toHaveBeenCalled();
+      expect(renderer!.root.findAllByProps({ "data-mermaid-diagram": "" })).toHaveLength(0);
+
+      await act(async () => {
+        renderer!.update(<ChatMarkdown cwd="/tmp/project" text={text} />);
+      });
+
+      expect(mermaidMocks.renderMermaidDiagram).toHaveBeenCalledWith(
+        "graph TD\n  A --> B\n",
+        "dark",
+      );
+      expect(renderer!.root.findByProps({ "data-mermaid-diagram": "" }).props).toMatchObject({
+        role: "img",
+        "aria-label": "Mermaid diagram",
+      });
+      expect(codeButton(renderer!, "Copy code")).toBeDefined();
+      expect(renderer!.root.findAllByProps({ "aria-label": "Wrap lines" })).toHaveLength(0);
+      expect(renderer!.root.findAllByProps({ "aria-label": "Disable line wrap" })).toHaveLength(0);
+    } finally {
+      await act(async () => renderer?.unmount());
+      vi.unstubAllGlobals();
+      mermaidMocks.renderMermaidDiagram.mockReset();
+    }
+  });
+
   it("recovers highlighting after a failed fence changes without resetting its controls", async () => {
     const highlighter = await getSyntaxHighlighterPromise("text");
     const codeToHtml = highlighter.codeToHtml.bind(highlighter);
