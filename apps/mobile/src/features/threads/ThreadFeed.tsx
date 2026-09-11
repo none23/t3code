@@ -144,6 +144,7 @@ import {
 } from "@t3tools/mobile-markdown-text/links";
 import {
   deriveThreadFeedPresentation,
+  deriveThreadFeedTurnSections,
   isContextCompactionActivityGroup,
   type ThreadFeedEntry,
   type ThreadFeedLatestTurn,
@@ -1357,7 +1358,7 @@ function renderFeedEntry(
     readonly onCopyWorkRow: (rowId: string, value: string) => void;
     readonly onToggleWorkGroup: (groupId: string, anchorKey: string) => void;
     readonly onToggleWorkRow: (rowId: string, anchorKey: string) => void;
-    readonly onToggleTurnFold: (turnId: TurnId) => void;
+    readonly onToggleTurnFold: (foldId: string) => void;
     readonly onPressPreview: (source: FilePreviewSource) => void;
     readonly onPressVideo: (attachment: ChatFileAttachment, sourceIdentifier: string) => void;
     readonly markdownLinkHandlers: MarkdownLinkHandlers;
@@ -1383,7 +1384,7 @@ function renderFeedEntry(
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: entry.expanded }}
-        onPress={() => props.onToggleTurnFold(entry.turnId)}
+        onPress={() => props.onToggleTurnFold(entry.id)}
         hitSlop={4}
         className="mb-1 min-h-11 flex-row items-center gap-2 border-b border-adaptive-neutral-200-a80-white-a8 px-2"
         style={{
@@ -1961,14 +1962,14 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     readonly copiedRowId: string | null;
     readonly expandedWorkGroups: Record<string, boolean>;
     readonly expandedWorkRows: Record<string, boolean>;
-    readonly expandedTurnIds: ReadonlySet<TurnId>;
+    readonly expandedFoldIds: ReadonlySet<string>;
   }>({
     copiedRowId: null,
     expandedWorkGroups: {},
     expandedWorkRows: {},
-    expandedTurnIds: new Set(),
+    expandedFoldIds: new Set(),
   });
-  const { copiedRowId, expandedWorkGroups, expandedWorkRows, expandedTurnIds } = interactionState;
+  const { copiedRowId, expandedWorkGroups, expandedWorkRows, expandedFoldIds } = interactionState;
   const [expandedFile, setExpandedFile] = useState<FilePreviewSource | null>(null);
   const [expandedVideo, setExpandedVideo] = useState<VideoPreviewSource | null>(null);
   const fileShareSourceIdentifier = useId();
@@ -2393,7 +2394,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         deriveThreadFeedPresentation(
           props.feed,
           props.latestTurn,
-          expandedTurnIds,
+          expandedFoldIds,
           expandedWorkGroupIds,
           props.activeWorkStartedAt,
         ),
@@ -2402,7 +2403,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       ),
     [
       props.queuedMessages,
-      expandedTurnIds,
+      expandedFoldIds,
       expandedWorkGroupIds,
       props.activeWorkStartedAt,
       props.feed,
@@ -2451,20 +2452,26 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         const interruptedTurnId = props.latestTurn.turnId;
         setInteractionState((current) => ({
           ...current,
-          expandedTurnIds: new Set(current.expandedTurnIds).add(interruptedTurnId),
+          expandedFoldIds: new Set([
+            ...current.expandedFoldIds,
+            ...deriveThreadFeedTurnSections(props.feed)
+              .filter((section) => section.turnId === interruptedTurnId)
+              .map((entry) => entry.id),
+          ]),
         }));
       }
       return;
     }
     setInteractionState((current) => {
-      if (!current.expandedTurnIds.has(previous.turnId)) {
-        return current;
+      const next = new Set(current.expandedFoldIds);
+      for (const section of deriveThreadFeedTurnSections(props.feed)) {
+        if (section.turnId === previous.turnId) next.delete(section.id);
       }
-      const next = new Set(current.expandedTurnIds);
-      next.delete(previous.turnId);
-      return { ...current, expandedTurnIds: next };
+      return next.size === current.expandedFoldIds.size
+        ? current
+        : { ...current, expandedFoldIds: next };
     });
-  }, [props.latestTurn]);
+  }, [props.latestTurn, props.feed]);
 
   useEffect(() => {
     return () => {
@@ -2519,7 +2526,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     if (disclosureAnchorKeyRef.current !== null) {
       settleDisclosureAfterLayout();
     }
-  }, [expandedTurnIds, expandedWorkGroups, expandedWorkRows, settleDisclosureAfterLayout]);
+  }, [expandedFoldIds, expandedWorkGroups, expandedWorkRows, settleDisclosureAfterLayout]);
 
   const handleItemSizeChanged = useCallback(() => {
     if (disclosureAnchorKeyRef.current !== null) {
@@ -2587,16 +2594,16 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   );
 
   const onToggleTurnFold = useCallback(
-    (turnId: TurnId) => {
-      suspendEndScrollMaintenanceForDisclosure(`turn-fold:${turnId}`);
+    (foldId: string) => {
+      suspendEndScrollMaintenanceForDisclosure(foldId);
       setInteractionState((current) => {
-        const next = new Set(current.expandedTurnIds);
-        if (next.has(turnId)) {
-          next.delete(turnId);
+        const next = new Set(current.expandedFoldIds);
+        if (next.has(foldId)) {
+          next.delete(foldId);
         } else {
-          next.add(turnId);
+          next.add(foldId);
         }
-        return { ...current, expandedTurnIds: next };
+        return { ...current, expandedFoldIds: next };
       });
     },
     [suspendEndScrollMaintenanceForDisclosure],
