@@ -543,7 +543,18 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   const slashCommands = [COMPACT_SLASH_COMMAND, ...(capabilities?.slashCommands ?? [])];
   const dedupedSlashCommands = dedupeSlashCommands(slashCommands);
 
-  if (!capabilities) {
+  // Account metadata is how the CLI tells us who it is signed in as. An init
+  // without any of it (older CLIs, or an SDK/CLI mismatch) cannot be trusted
+  // as authenticated, so it lands on the same unverified status as a failed
+  // probe.
+  const hasAccountMetadata =
+    capabilities !== undefined &&
+    (capabilities.email !== undefined ||
+      capabilities.tokenSource !== undefined ||
+      capabilities.apiKeySource !== undefined ||
+      capabilities.subscriptionType !== undefined ||
+      capabilities.apiProvider !== undefined);
+  if (!capabilities || !hasAccountMetadata) {
     return buildServerProvider({
       presentation: CLAUDE_PRESENTATION,
       enabled: claudeSettings.enabled,
