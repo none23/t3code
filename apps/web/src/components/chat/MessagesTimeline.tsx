@@ -496,6 +496,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const listIdentityRef = useRef(listIdentityKey);
   const previousLatestTurnRef = useRef(latestTurn);
+  const interruptedSectionIdsRef = useRef<Set<string> | null>(null);
   // The list stays mounted across thread switches. Its first end pins on the
   // new thread must snap, not glide, even if that thread is mid-turn.
   const [settlingListIdentity, setSettlingListIdentity] = useState<string | null>(null);
@@ -505,6 +506,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   if (listIdentityRef.current !== listIdentityKey) {
     listIdentityRef.current = listIdentityKey;
     previousLatestTurnRef.current = latestTurn;
+    interruptedSectionIdsRef.current = null;
     setSettlingListIdentity(listIdentityKey);
     paintedExpandedFoldIds = new Set();
     paintedExpandedWorkGroupIds = new Set();
@@ -648,10 +650,24 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   useEffect(() => {
     const previous = previousLatestTurnRef.current;
     previousLatestTurnRef.current = latestTurn;
+    if (latestTurn?.state !== "interrupted" || latestTurn.turnId !== previous?.turnId) {
+      interruptedSectionIdsRef.current = null;
+    }
     if (!latestTurn || !previous) return;
     if (latestTurn.turnId === previous.turnId) {
       if (previous.state === "running" && latestTurn.state === "interrupted") {
-        expandCitedTurn(latestTurn.turnId);
+        interruptedSectionIdsRef.current = new Set();
+      }
+      const seen = interruptedSectionIdsRef.current;
+      if (seen) {
+        // Feed entries can arrive after the interrupt. Open each section only once.
+        const added = deriveTimelineTurnSections(timelineEntries)
+          .filter((section) => section.turnId === latestTurn.turnId && !seen.has(section.id))
+          .map((section) => section.id);
+        for (const id of added) seen.add(id);
+        if (added.length > 0) {
+          setExpandedFoldIds((current) => new Set([...current, ...added]));
+        }
       }
       return;
     }
@@ -662,7 +678,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       }
       return next.size === current.size ? current : next;
     });
-  }, [latestTurn, timelineEntries, expandCitedTurn]);
+  }, [latestTurn, timelineEntries]);
 
   const rowsProjectionRef = useRef<{
     threadKey: string;

@@ -1908,6 +1908,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const disclosureAnchorKeyRef = useRef<string | null>(null);
   const headerMaterialVisibleRef = useRef(false);
   const previousLatestTurnRef = useRef(props.latestTurn);
+  const interruptedSectionIdsRef = useRef<Set<string> | null>(null);
   const userScrollSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width: windowWidth, fontScale } = useWindowDimensions();
   const { appearance } = useAppearancePreferences();
@@ -2444,20 +2445,28 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   useEffect(() => {
     const previous = previousLatestTurnRef.current;
     previousLatestTurnRef.current = props.latestTurn;
+    if (props.latestTurn?.state !== "interrupted" || props.latestTurn.turnId !== previous?.turnId) {
+      interruptedSectionIdsRef.current = null;
+    }
     if (!props.latestTurn || !previous) {
       return;
     }
     if (props.latestTurn.turnId === previous.turnId) {
       if (previous.state === "running" && props.latestTurn.state === "interrupted") {
+        interruptedSectionIdsRef.current = new Set();
+      }
+      const seen = interruptedSectionIdsRef.current;
+      if (seen) {
         const interruptedTurnId = props.latestTurn.turnId;
+        // Feed entries can arrive after the interrupt. Open each section only once.
+        const added = deriveThreadFeedTurnSections(props.feed)
+          .filter((section) => section.turnId === interruptedTurnId && !seen.has(section.id))
+          .map((section) => section.id);
+        for (const id of added) seen.add(id);
+        if (added.length === 0) return;
         setInteractionState((current) => ({
           ...current,
-          expandedFoldIds: new Set([
-            ...current.expandedFoldIds,
-            ...deriveThreadFeedTurnSections(props.feed)
-              .filter((section) => section.turnId === interruptedTurnId)
-              .map((entry) => entry.id),
-          ]),
+          expandedFoldIds: new Set([...current.expandedFoldIds, ...added]),
         }));
       }
       return;
