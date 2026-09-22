@@ -9,10 +9,11 @@ import {
 import { act, createRef, useLayoutEffect, type ReactNode, type Ref } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { create, type ReactTestRenderer } from "react-test-renderer";
-import { beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { LegendListRef, MaintainScrollAtEndOptions } from "@legendapp/list/react";
 import { shouldUseRestingComposerLayout } from "../composerFooterLayout";
 import { useComposerFocusState } from "./useComposerFocusState";
+import { rememberTimelinePosition } from "./timelineScrollAnchoring";
 
 vi.mock("@legendapp/list/react", async () => {
   const legendListTestId = "legend-list";
@@ -146,7 +147,9 @@ function matchMedia() {
 let MessagesTimeline: typeof import("./MessagesTimeline").MessagesTimeline;
 let resolvePreviewAnnotationImage: typeof import("./MessagesTimeline").resolvePreviewAnnotationImage;
 
-beforeAll(async () => {
+const ElementStub = class ElementStub {};
+
+function stubDomGlobals() {
   const classList = {
     add: () => {},
     remove: () => {},
@@ -154,6 +157,7 @@ beforeAll(async () => {
     contains: () => false,
   };
 
+  vi.stubGlobal("Element", ElementStub);
   vi.stubGlobal("localStorage", {
     getItem: () => null,
     setItem: () => {},
@@ -161,6 +165,7 @@ beforeAll(async () => {
     clear: () => {},
   });
   vi.stubGlobal("window", {
+    Element: ElementStub,
     matchMedia,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -177,9 +182,16 @@ beforeAll(async () => {
       offsetHeight: 0,
     },
   });
+}
 
+beforeAll(async () => {
+  stubDomGlobals();
   ({ MessagesTimeline, resolvePreviewAnnotationImage } = await import("./MessagesTimeline"));
 }, 30_000);
+
+// The scroll-settling test clears every global stub; mounted timeline rows
+// still touch `window` through the tooltip's focus handling.
+beforeEach(stubDomGlobals);
 
 const ACTIVE_THREAD_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const MESSAGE_CREATED_AT = "2026-03-17T19:12:28.000Z";
@@ -274,6 +286,62 @@ function buildSnapShotTimelineEntry(previewUrl?: string) {
 }
 
 describe("MessagesTimeline", () => {
+  it("restores only the remembered steering fold when returning to a thread", () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.stubGlobal("requestAnimationFrame", () => 0);
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const turnId = TurnId.make("remembered-steering");
+    const work = (id: string, label: string) => ({
+      id,
+      kind: "work" as const,
+      createdAt: MESSAGE_CREATED_AT,
+      entry: { id, turnId, label, createdAt: MESSAGE_CREATED_AT, tone: "info" as const },
+    });
+    const entries = [
+      work("before", "Work before steering"),
+      buildUserTimelineEntry("Check the second file too."),
+      work("after", "Work after steering"),
+    ];
+    const threadKey = "environment-local:remembered-steering";
+    rememberTimelinePosition(threadKey, {
+      rowId: `turn-fold:${turnId}:after`,
+      offsetWithinRow: 0,
+      scrollOffset: 0,
+      atEnd: true,
+      disclosures: {
+        folds: new Set([`turn-fold:${turnId}:after`]),
+        workGroups: new Set(),
+        spawnEntries: new Set(),
+        reasoningMessages: new Set(),
+        workGroupState: { scrollPositions: new Map(), expandedEntries: new Set() },
+      },
+    });
+    const timeline = (routeThreadKey: string) => (
+      <MessagesTimeline
+        {...buildProps()}
+        routeThreadKey={routeThreadKey}
+        timelineEntries={entries}
+      />
+    );
+    let renderer: ReactTestRenderer | undefined;
+    const content = () => JSON.stringify(renderer?.toJSON());
+    try {
+      act(() => {
+        renderer = create(timeline(threadKey));
+      });
+      expect(content()).toContain("Work after steering");
+      expect(content()).not.toContain("Work before steering");
+      act(() => renderer!.update(timeline("environment-local:unvisited-steering")));
+      expect(content()).not.toContain("Work after steering");
+      act(() => renderer!.update(timeline(threadKey)));
+      expect(content()).toContain("Work after steering");
+      expect(content()).not.toContain("Work before steering");
+    } finally {
+      act(() => renderer?.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("opens late interrupted work once and respects a subsequent manual collapse", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("requestAnimationFrame", () => 0);
@@ -1367,7 +1435,7 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain('aria-label="Copy link"');
+    expect(markup).toContain('aria-label="Copy message"');
     expect(markup).toContain('data-user-message-collapsed="true"');
     expect(markup).toContain('data-user-message-footer="true"');
   });
@@ -1702,6 +1770,98 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("Running pnpm");
     expect(markup).not.toContain("tool call failed");
   });
+
+  it.each(
+    (
+      [
+        [
+          "**Viewing image first** with *care*, ~~old~~ `code` and [context](https://example.com)",
+          "Viewing image first with care, old code and context",
+          1,
+        ],
+        ["first paragraph\n\nsecond paragraph", "first paragraph second paragraph", 0],
+        ["- first\n- second", "first second", 0],
+        ["first  \nsecond", "first second", 0],
+        ["![image description](image.png)", "image description", 0],
+        ["![](image.png)", "Thought", 0],
+        ["---", "Thought", 0],
+      ] as const
+    ).flatMap(([markdown, expected, strongCount]) =>
+      [false, true].map((streaming) => ({
+        markdown,
+        expected,
+        strongCount,
+        streaming,
+      })),
+    ),
+  )(
+    "shows a plain thought preview for $markdown, streaming=$streaming",
+    async ({ markdown, expected, strongCount, streaming }) => {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      vi.stubGlobal("requestAnimationFrame", () => 0);
+      vi.stubGlobal("cancelAnimationFrame", () => {});
+      const turnId = TurnId.make("turn-thought");
+      const thought = buildAssistantTimelineEntry(markdown);
+      let renderer: ReactTestRenderer | undefined;
+      try {
+        await act(() => {
+          renderer = create(
+            <MessagesTimeline
+              {...buildProps()}
+              isWorking
+              runningTurnId={turnId}
+              timelineEntries={[
+                {
+                  id: "work-entry",
+                  kind: "work",
+                  createdAt: MESSAGE_CREATED_AT,
+                  entry: {
+                    id: "work",
+                    createdAt: MESSAGE_CREATED_AT,
+                    turnId,
+                    label: "Read image",
+                    tone: "tool",
+                    itemType: "command_execution",
+                    command: "cat image.png",
+                    toolLifecycleStatus: "completed",
+                  },
+                },
+                {
+                  ...thought,
+                  message: { ...thought.message, role: "reasoning", turnId, streaming },
+                },
+              ]}
+            />,
+          );
+        });
+        await act(() => renderer!.root.findByProps({ "aria-expanded": false }).props.onClick());
+        const text = renderer!.root.findByProps({
+          className: "relative min-w-0 flex-1 truncate text-secondary-label",
+        });
+        const preview = text.parent!;
+        expect(
+          text
+            .findAll(() => true)
+            .flatMap((node) => node.children)
+            .filter((child) => typeof child === "string")
+            .join(""),
+        ).toBe(
+          (streaming && expected === "Thought" ? "Thinking" : expected).repeat(streaming ? 2 : 1),
+        );
+        expect(
+          preview.findAll((node) =>
+            ["strong", "em", "del", "code", "a"].includes(String(node.type)),
+          ),
+        ).toHaveLength(0);
+        await act(() => preview.props.onClick());
+        expect(renderer!.root.findAllByType("strong")).toHaveLength(strongCount);
+        await act(() => preview.props.onClick());
+        expect(renderer!.root.findAllByType("strong")).toHaveLength(0);
+      } finally {
+        await act(() => renderer?.unmount());
+      }
+    },
+  );
 
   it("renders initial thinking as the shared live activity row", () => {
     const turnId = TurnId.make("turn-live");
