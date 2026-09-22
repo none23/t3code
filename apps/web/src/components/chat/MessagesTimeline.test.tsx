@@ -286,7 +286,8 @@ function buildSnapShotTimelineEntry(previewUrl?: string) {
 }
 
 describe("MessagesTimeline", () => {
-  it("restores only the remembered steering fold when returning to a thread", () => {
+  it("restores only the remembered steering fold when returning to a thread", async () => {
+    const { deriveTimelineTurnSections } = await import("./MessagesTimeline.logic");
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("requestAnimationFrame", () => 0);
     vi.stubGlobal("cancelAnimationFrame", () => {});
@@ -303,25 +304,22 @@ describe("MessagesTimeline", () => {
       work("after", "Work after steering"),
     ];
     const threadKey = "environment-local:remembered-steering";
+    const foldId = deriveTimelineTurnSections(entries)[1]!.id;
     rememberTimelinePosition(threadKey, {
-      rowId: `turn-fold:${turnId}:after`,
+      rowId: foldId,
       offsetWithinRow: 0,
       scrollOffset: 0,
       atEnd: true,
       disclosures: {
-        folds: new Set([`turn-fold:${turnId}:after`]),
+        folds: new Set([foldId]),
         workGroups: new Set(),
         spawnEntries: new Set(),
         reasoningMessages: new Set(),
         workGroupState: { scrollPositions: new Map(), expandedEntries: new Set() },
       },
     });
-    const timeline = (routeThreadKey: string) => (
-      <MessagesTimeline
-        {...buildProps()}
-        routeThreadKey={routeThreadKey}
-        timelineEntries={entries}
-      />
+    const timeline = (routeThreadKey: string, feed = entries) => (
+      <MessagesTimeline {...buildProps()} routeThreadKey={routeThreadKey} timelineEntries={feed} />
     );
     let renderer: ReactTestRenderer | undefined;
     const content = () => JSON.stringify(renderer?.toJSON());
@@ -331,6 +329,9 @@ describe("MessagesTimeline", () => {
       });
       expect(content()).toContain("Work after steering");
       expect(content()).not.toContain("Work before steering");
+      const delayed = [...entries.slice(0, 2), work("delayed", "Delayed work"), entries[2]!];
+      act(() => renderer!.update(timeline(threadKey, delayed)));
+      expect(content()).toContain("Received 2 updates");
       act(() => renderer!.update(timeline("environment-local:unvisited-steering")));
       expect(content()).not.toContain("Work after steering");
       act(() => renderer!.update(timeline(threadKey)));
@@ -361,7 +362,16 @@ describe("MessagesTimeline", () => {
         },
       },
     ];
-    const timeline = (state: "running" | "interrupted", feed = entries) => (
+    const beforeSteer = [
+      {
+        ...entries[0]!,
+        id: "earlier-work",
+        entry: { ...entries[0]!.entry, id: "earlier-work", label: "Earlier work" },
+      },
+      buildUserTimelineEntry("Check the second file too."),
+    ];
+    const steeredEntries = [...beforeSteer, ...entries];
+    const timeline = (state: "running" | "interrupted", feed = steeredEntries) => (
       <MessagesTimeline
         {...buildProps()}
         timelineEntries={feed}
@@ -378,16 +388,26 @@ describe("MessagesTimeline", () => {
     const content = () => JSON.stringify(renderer?.toJSON());
     try {
       act(() => {
-        renderer = create(timeline("running", []));
+        renderer = create(timeline("running", beforeSteer));
       });
-      act(() => renderer!.update(timeline("interrupted", [])));
+      act(() => renderer!.update(timeline("interrupted", beforeSteer)));
       act(() => renderer!.update(timeline("interrupted")));
       expect(content()).toContain("Inspected synthetic-file.ts");
 
-      act(() => renderer!.root.findByProps({ "aria-expanded": true }).props.onClick());
+      act(() => renderer!.root.findAllByProps({ "aria-expanded": true }).at(-1)!.props.onClick());
       expect(content()).not.toContain("Inspected synthetic-file.ts");
-      act(() => renderer!.update(timeline("interrupted", [...entries])));
+      const delayed = {
+        ...entries[0]!,
+        id: "delayed-earlier-work",
+        entry: { ...entries[0]!.entry, id: "delayed-earlier-work" },
+      };
+      act(() => renderer!.update(timeline("interrupted", [...beforeSteer, delayed, ...entries])));
       expect(content()).not.toContain("Inspected synthetic-file.ts");
+      expect(
+        renderer!.root
+          .findAllByProps({ "data-timeline-row-kind": "turn-fold" })
+          .map((row) => row.findByType("button").props["aria-expanded"]),
+      ).toEqual([true, false]);
 
       act(() => renderer!.unmount());
       act(() => {

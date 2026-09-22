@@ -20,6 +20,7 @@ export function groupTurnSections<Entry extends { readonly id: string }>(
   const currentByTurn = new Map<TurnId, TurnSection<Entry>>();
   const lastByTurn = new Map<TurnId, TurnSection<Entry>>();
   let pendingUserBoundary: string | null = null;
+  let userBoundaryId: string | null = null;
 
   for (const entry of entries) {
     const boundary = userTimestamp(entry);
@@ -27,6 +28,7 @@ export function groupTurnSections<Entry extends { readonly id: string }>(
       for (const section of currentByTurn.values()) section.endBoundary = boundary;
       currentByTurn.clear();
       pendingUserBoundary = boundary;
+      userBoundaryId = entry.id;
       continue;
     }
     const turnId = entryTurnId(entry);
@@ -36,7 +38,11 @@ export function groupTurnSections<Entry extends { readonly id: string }>(
       const previous = lastByTurn.get(turnId);
       if (previous) previous.continues = true;
       section = {
-        id: previous ? `turn-fold:${turnId}:${entry.id}` : `turn-fold:${turnId}`,
+        // Delayed work may arrive before the first entry, but the steer stays fixed.
+        id:
+          previous && userBoundaryId !== null
+            ? `turn-fold:${turnId}:${userBoundaryId}`
+            : `turn-fold:${turnId}`,
         turnId,
         entries: [],
         startBoundary: pendingUserBoundary,
