@@ -2,6 +2,7 @@ import { Box, ExtendedFloatingActionButton, Host, Icon, Text } from "@expo/ui/je
 import {
   defaultMinSize,
   fillMaxWidth,
+  graphicsLayer,
   height,
   onSizeChanged,
   size,
@@ -22,12 +23,20 @@ export function MaterialScrollComposeButton(props: {
   const { appearance, themeAppearance, themeVariables: colors } = useAppearancePreferences();
   const typography = resolveScaledTextRole("footnote", appearance.baseFontSize);
   const { iconSize, fabSize } = useAndroidControlSizing();
-  const [buttonWidth, setButtonWidth] = useState(fabSize);
+  // Scale the native 56dp minimum; keep text and icons at their requested sizes.
+  const nativeSize = Math.max(56, fabSize);
+  const scale = fabSize / nativeSize;
+  const nativeIconSize = iconSize / scale;
+  const [buttonWidth, setButtonWidth] = useState(nativeSize);
   const rememberWidth = useCallback(({ width }: { width: number }) => {
     setButtonWidth(width);
   }, []);
   return (
-    <View pointerEvents="box-none" className={props.className} style={[props.style, { left: 20 }]}>
+    <View
+      pointerEvents="box-none"
+      className={props.className}
+      style={[props.style, { left: 20, height: fabSize }]}
+    >
       <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
         <Host
           matchContents={{ vertical: true }}
@@ -40,16 +49,22 @@ export function MaterialScrollComposeButton(props: {
               expanded={props.expanded}
               containerColor={colors["--color-primary"]}
               modifiers={[
-                defaultMinSize({ minWidth: fabSize }),
-                height(fabSize),
+                defaultMinSize({ minWidth: nativeSize }),
+                height(nativeSize),
+                graphicsLayer({
+                  scaleX: scale,
+                  scaleY: scale,
+                  transformOriginX: 1,
+                  transformOriginY: 0,
+                }),
                 onSizeChanged(rememberWidth),
               ]}
             >
               <ExtendedFloatingActionButton.Icon>
-                <Box modifiers={[size(iconSize, iconSize)]}>
+                <Box modifiers={[size(nativeIconSize, nativeIconSize)]}>
                   <Icon
                     source={require("../../assets/icons/compose.xml")}
-                    size={iconSize}
+                    size={nativeIconSize}
                     tint={colors["--color-primary-foreground"]}
                   />
                 </Box>
@@ -57,7 +72,11 @@ export function MaterialScrollComposeButton(props: {
               <ExtendedFloatingActionButton.Text>
                 <Text
                   color={colors["--color-primary-foreground"]}
-                  style={{ ...typography, fontWeight: "500" }}
+                  style={{
+                    fontSize: typography.fontSize / scale,
+                    lineHeight: typography.lineHeight / scale,
+                    fontWeight: "500",
+                  }}
                 >
                   New thread
                 </Text>
@@ -77,8 +96,8 @@ export function MaterialScrollComposeButton(props: {
           right: 0,
           top: 0,
           bottom: 0,
-          width: buttonWidth,
-          borderRadius: 16,
+          width: buttonWidth * scale,
+          borderRadius: 16 * scale,
           overflow: "hidden",
         }}
       />
