@@ -8,10 +8,10 @@ import {
   width,
 } from "@expo/ui/jetpack-compose/modifiers";
 import { View } from "react-native";
-
-import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { resolveScaledTextRole } from "../lib/appearancePreferences";
+
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
+import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import type { MaterialMenuPopupProps } from "./MaterialMenuPopup";
 import { isAppSymbolName, SymbolView, type AppSymbolName } from "./AppSymbol";
 
@@ -44,80 +44,33 @@ function MenuIcon(props: {
   );
 }
 
-function MenuItem(props: {
-  readonly action: MaterialMenuPopupProps["actions"][number];
-  readonly onPress: () => void;
-}) {
-  const { action } = props;
-  const { appearance, themeVariables: colors } = useAppearancePreferences();
-  const { scale, menuItemHeight, menuWidth } = useAndroidControlSizing();
-  const body = resolveScaledTextRole("body", appearance.baseFontSize);
-  const caption = resolveScaledTextRole("caption", appearance.baseFontSize);
-  const disabled = Boolean(action.attributes?.disabled);
-  const destructive = Boolean(action.attributes?.destructive);
-  const trailingIcon =
-    (action.subactions?.length ?? 0) > 0
-      ? "chevron.right"
-      : action.state === "on"
-        ? "checkmark"
-        : null;
-
-  return (
-    // Clickable Surface enforces 48dp even when its content requests a smaller row.
-    <Row
-      verticalAlignment="center"
-      horizontalArrangement={{ spacedBy: 12 * scale }}
-      modifiers={[
-        width(menuWidth),
-        defaultMinSize({ minHeight: menuItemHeight }),
-        ...(disabled ? [] : [clickable(props.onPress)]),
-        padding(16 * scale, 8 * scale, 16 * scale, 8 * scale),
-      ]}
-    >
-      {action.image && isAppSymbolName(action.image) ? (
-        <MenuIcon name={action.image} disabled={disabled} destructive={destructive} />
-      ) : null}
-      <Column modifiers={[weight(1)]}>
-        <Text
-          style={body}
-          color={
-            colors[
-              disabled
-                ? "--color-foreground-muted"
-                : destructive
-                  ? "--color-danger-foreground"
-                  : "--color-foreground"
-            ]
-          }
-        >
-          {action.title}
-        </Text>
-        {action.subtitle ? (
-          <Text style={caption} color={colors["--color-foreground-muted"]}>
-            {action.subtitle}
-          </Text>
-        ) : null}
-      </Column>
-      {trailingIcon ? <MenuIcon name={trailingIcon} disabled={disabled} /> : null}
-    </Row>
-  );
-}
-
 /** Native popup positioned at the original trigger, outside virtualized rows. */
 export function MaterialMenuPopup(props: MaterialMenuPopupProps) {
   const { appearance, themeAppearance, themeVariables: colors } = useAppearancePreferences();
-  const { scale, menuWidth } = useAndroidControlSizing();
+  const { scale, menuWidth, menuItemHeight } = useAndroidControlSizing();
+  const body = resolveScaledTextRole("body", appearance.baseFontSize);
   const caption = resolveScaledTextRole("caption", appearance.baseFontSize);
+  const foreground = colors["--color-foreground"];
+  const muted = colors["--color-foreground-muted"];
+  // A fixed native item height clips wrapped labels; a minimum lets each row grow.
+  const itemModifiers = [width(menuWidth), defaultMinSize({ minHeight: menuItemHeight })];
+  const itemPadding = padding(16 * scale, 8 * scale, 16 * scale, 8 * scale);
   const items = (
     <>
       {props.parent ? (
-        <MenuItem
-          action={{ title: props.parent.title, image: "arrow.left" }}
-          onPress={props.onBack}
-        />
+        <Row
+          verticalAlignment="center"
+          horizontalArrangement={{ spacedBy: 12 * scale }}
+          modifiers={[...itemModifiers, clickable(props.onBack), itemPadding]}
+        >
+          <MenuIcon name="arrow.left" />
+          <Text color={foreground} style={body} modifiers={[weight(1)]}>
+            {props.parent.title}
+          </Text>
+        </Row>
       ) : props.title ? (
         <Text
-          color={colors["--color-foreground-muted"]}
+          color={muted}
           style={caption}
           modifiers={[padding(16 * scale, 8 * scale, 16 * scale, 8 * scale)]}
         >
@@ -125,11 +78,48 @@ export function MaterialMenuPopup(props: MaterialMenuPopupProps) {
         </Text>
       ) : null}
       {props.actions.map((action, index) => (
-        <MenuItem
+        <Row
           key={action.id ?? `${index}-${action.title}`}
-          action={action}
-          onPress={() => props.onPress(action)}
-        />
+          verticalAlignment="center"
+          horizontalArrangement={{ spacedBy: 12 * scale }}
+          modifiers={[
+            ...itemModifiers,
+            ...(action.attributes?.disabled ? [] : [clickable(() => props.onPress(action))]),
+            itemPadding,
+          ]}
+        >
+          {action.image && isAppSymbolName(action.image) ? (
+            <MenuIcon
+              name={action.image}
+              destructive={action.attributes?.destructive}
+              disabled={action.attributes?.disabled}
+            />
+          ) : null}
+          <Column modifiers={[weight(1)]}>
+            <Text
+              style={body}
+              color={
+                action.attributes?.disabled
+                  ? muted
+                  : action.attributes?.destructive
+                    ? colors["--color-danger-foreground"]
+                    : foreground
+              }
+            >
+              {action.title}
+            </Text>
+            {action.subtitle ? (
+              <Text color={muted} style={caption}>
+                {action.subtitle}
+              </Text>
+            ) : null}
+          </Column>
+          {(action.subactions?.length ?? 0) > 0 ? (
+            <MenuIcon name="chevron.right" disabled={action.attributes?.disabled} />
+          ) : action.state === "on" ? (
+            <MenuIcon name="checkmark" disabled={action.attributes?.disabled} />
+          ) : null}
+        </Row>
       ))}
     </>
   );

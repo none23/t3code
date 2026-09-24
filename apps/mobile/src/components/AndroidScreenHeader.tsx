@@ -57,7 +57,10 @@ export function AndroidScreenHeader(props: {
         borderBottomWidth: props.hideBottomBorder ? 0 : undefined,
       }}
     >
-      <View style={{ minHeight: materialToolbarHeight }} className="flex-row items-center gap-1">
+      <View
+        style={{ minHeight: materialToolbarHeight }}
+        className="min-h-14 flex-row items-center gap-1"
+      >
         {props.onBack ? (
           <MaterialIconButton
             accessibilityLabel="Navigate up"
