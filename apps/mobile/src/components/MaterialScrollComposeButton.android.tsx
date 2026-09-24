@@ -26,7 +26,7 @@ export function MaterialScrollComposeButton(props: {
   // Scale the native 56dp minimum; keep text and icons at their requested sizes.
   const nativeSize = Math.max(56, fabSize);
   const scale = fabSize / nativeSize;
-  const nativeIconSize = iconSize / scale;
+  const nativeIconSize = Math.round(iconSize / scale);
   const [buttonWidth, setButtonWidth] = useState(nativeSize);
   const rememberWidth = useCallback(({ width }: { width: number }) => {
     setButtonWidth(width);
@@ -96,7 +96,8 @@ export function MaterialScrollComposeButton(props: {
           right: 0,
           top: 0,
           bottom: 0,
-          width: buttonWidth * scale,
+          // Release the label area as soon as collapse starts, before native measurements arrive.
+          width: props.expanded ? buttonWidth * scale : fabSize,
           borderRadius: 16 * scale,
           overflow: "hidden",
         }}
