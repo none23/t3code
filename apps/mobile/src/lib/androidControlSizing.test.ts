@@ -14,10 +14,23 @@ describe("Android control sizing", () => {
       buttonSize: 48,
       fabSize: 56,
       menuWidth: 250,
+      menuItemHeight: 48,
       fabClearance: 148,
     });
-    expect(small).toMatchObject({ iconSize: 18, buttonSize: 48, fabSize: 48, menuWidth: 188 });
-    expect(large).toMatchObject({ iconSize: 30, buttonSize: 60, fabSize: 70, menuWidth: 313 });
+    expect(small).toMatchObject({
+      iconSize: 18,
+      buttonSize: 48,
+      fabSize: 48,
+      menuWidth: 188,
+      menuItemHeight: 36,
+    });
+    expect(large).toMatchObject({
+      iconSize: 30,
+      buttonSize: 60,
+      fabSize: 70,
+      menuWidth: 313,
+      menuItemHeight: 60,
+    });
   });
 
   it("keeps buttons tappable and both floating actions clear of the list at every text size", () => {

@@ -1,14 +1,12 @@
+import { Box, Column, DropdownMenu, Row, Host, RNHostView, Text } from "@expo/ui/jetpack-compose";
 import {
-  Box,
-  Column,
-  DropdownMenu,
-  Row,
-  Surface,
-  Host,
-  RNHostView,
-  Text,
-} from "@expo/ui/jetpack-compose";
-import { defaultMinSize, padding, size, weight, width } from "@expo/ui/jetpack-compose/modifiers";
+  clickable,
+  defaultMinSize,
+  padding,
+  size,
+  weight,
+  width,
+} from "@expo/ui/jetpack-compose/modifiers";
 import { View } from "react-native";
 
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
@@ -52,7 +50,7 @@ function MenuItem(props: {
 }) {
   const { action } = props;
   const { appearance, themeVariables: colors } = useAppearancePreferences();
-  const { scale, buttonSize, menuWidth } = useAndroidControlSizing();
+  const { scale, menuItemHeight, menuWidth } = useAndroidControlSizing();
   const body = resolveScaledTextRole("body", appearance.baseFontSize);
   const caption = resolveScaledTextRole("caption", appearance.baseFontSize);
   const disabled = Boolean(action.attributes?.disabled);
@@ -65,43 +63,43 @@ function MenuItem(props: {
         : null;
 
   return (
-    <Surface color="transparent" enabled={!disabled} onClick={props.onPress}>
-      <Row
-        verticalAlignment="center"
-        horizontalArrangement={{ spacedBy: 12 * scale }}
-        modifiers={[
-          width(menuWidth),
-          defaultMinSize({ minHeight: buttonSize }),
-          padding(16 * scale, 8 * scale, 16 * scale, 8 * scale),
-        ]}
-      >
-        {action.image && isAppSymbolName(action.image) ? (
-          <MenuIcon name={action.image} disabled={disabled} destructive={destructive} />
-        ) : null}
-        <Column modifiers={[weight(1)]}>
-          <Text
-            style={body}
-            color={
-              colors[
-                disabled
-                  ? "--color-foreground-muted"
-                  : destructive
-                    ? "--color-danger-foreground"
-                    : "--color-foreground"
-              ]
-            }
-          >
-            {action.title}
+    // Clickable Surface enforces 48dp even when its content requests a smaller row.
+    <Row
+      verticalAlignment="center"
+      horizontalArrangement={{ spacedBy: 12 * scale }}
+      modifiers={[
+        width(menuWidth),
+        defaultMinSize({ minHeight: menuItemHeight }),
+        ...(disabled ? [] : [clickable(props.onPress)]),
+        padding(16 * scale, 8 * scale, 16 * scale, 8 * scale),
+      ]}
+    >
+      {action.image && isAppSymbolName(action.image) ? (
+        <MenuIcon name={action.image} disabled={disabled} destructive={destructive} />
+      ) : null}
+      <Column modifiers={[weight(1)]}>
+        <Text
+          style={body}
+          color={
+            colors[
+              disabled
+                ? "--color-foreground-muted"
+                : destructive
+                  ? "--color-danger-foreground"
+                  : "--color-foreground"
+            ]
+          }
+        >
+          {action.title}
+        </Text>
+        {action.subtitle ? (
+          <Text style={caption} color={colors["--color-foreground-muted"]}>
+            {action.subtitle}
           </Text>
-          {action.subtitle ? (
-            <Text style={caption} color={colors["--color-foreground-muted"]}>
-              {action.subtitle}
-            </Text>
-          ) : null}
-        </Column>
-        {trailingIcon ? <MenuIcon name={trailingIcon} disabled={disabled} /> : null}
-      </Row>
-    </Surface>
+        ) : null}
+      </Column>
+      {trailingIcon ? <MenuIcon name={trailingIcon} disabled={disabled} /> : null}
+    </Row>
   );
 }
 
