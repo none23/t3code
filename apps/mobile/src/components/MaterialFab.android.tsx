@@ -11,7 +11,7 @@ import { defaultMinSize, onSizeChanged, padding } from "@expo/ui/jetpack-compose
 import type { ReactNode } from "react";
 
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
-import { useScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
+import { resolveScaledTextRole } from "../lib/appearancePreferences";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 // Expo shapes are descriptor factories, not rendered children.
@@ -27,8 +27,8 @@ export function MaterialFab(props: {
   readonly onPress?: () => void;
   readonly onSizeChanged?: (size: { width: number; height: number }) => void;
 }) {
-  const { themeVariables: colors } = useAppearancePreferences();
-  const typography = useScaledTextRole("footnote");
+  const { appearance, themeVariables: colors } = useAppearancePreferences();
+  const typography = resolveScaledTextRole("footnote", appearance.baseFontSize);
   const { scale, iconSize, fabSize, largeFabSize } = useAndroidControlSizing();
   const dimension = props.large ? largeFabSize : fabSize;
   const inset = (dimension - (props.large ? Math.round(36 * scale) : iconSize)) / 2;

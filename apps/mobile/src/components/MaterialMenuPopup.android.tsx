@@ -12,7 +12,7 @@ import { defaultMinSize, padding, size, weight, width } from "@expo/ui/jetpack-c
 import { View } from "react-native";
 
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
-import { useScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
+import { resolveScaledTextRole } from "../lib/appearancePreferences";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
 import type { MaterialMenuPopupProps } from "./MaterialMenuPopup";
 import { isAppSymbolName, SymbolView, type AppSymbolName } from "./AppSymbol";
@@ -51,10 +51,10 @@ function MenuItem(props: {
   readonly onPress: () => void;
 }) {
   const { action } = props;
-  const { themeVariables: colors } = useAppearancePreferences();
+  const { appearance, themeVariables: colors } = useAppearancePreferences();
   const { scale, buttonSize, menuWidth } = useAndroidControlSizing();
-  const body = useScaledTextRole("body");
-  const caption = useScaledTextRole("caption");
+  const body = resolveScaledTextRole("body", appearance.baseFontSize);
+  const caption = resolveScaledTextRole("caption", appearance.baseFontSize);
   const disabled = Boolean(action.attributes?.disabled);
   const destructive = Boolean(action.attributes?.destructive);
   const trailingIcon =
@@ -107,9 +107,9 @@ function MenuItem(props: {
 
 /** Native popup positioned at the original trigger, outside virtualized rows. */
 export function MaterialMenuPopup(props: MaterialMenuPopupProps) {
-  const { themeAppearance, themeVariables: colors } = useAppearancePreferences();
+  const { appearance, themeAppearance, themeVariables: colors } = useAppearancePreferences();
   const { scale, menuWidth } = useAndroidControlSizing();
-  const caption = useScaledTextRole("caption");
+  const caption = resolveScaledTextRole("caption", appearance.baseFontSize);
   const items = (
     <>
       {props.parent ? (
