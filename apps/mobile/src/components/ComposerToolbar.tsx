@@ -14,6 +14,7 @@ import {
 import { cn } from "../lib/cn";
 import { AppText as Text } from "./AppText";
 import { SymbolView } from "./AppSymbol";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 const COMPOSER_TOOLBAR_GAP = 8;
 const COMPOSER_TOOLBAR_FADE_WIDTH = 18;
@@ -224,6 +225,8 @@ export function ComposerActionButton(props: {
   readonly onPress: () => void;
   readonly variant?: "primary" | "danger";
 }) {
+  const { scale } = useAndroidControlSizing();
+  const circleSize = Math.round(30 * scale);
   return (
     <Pressable
       accessibilityLabel={props.accessibilityLabel}
@@ -234,8 +237,9 @@ export function ComposerActionButton(props: {
       onPress={props.onPress}
     >
       <View
+        style={{ width: circleSize, height: circleSize }}
         className={cn(
-          "size-[30px] items-center justify-center rounded-full",
+          "items-center justify-center rounded-full",
           props.variant === "danger"
             ? "bg-danger"
             : props.disabled
@@ -245,7 +249,7 @@ export function ComposerActionButton(props: {
       >
         <SymbolView
           name={props.icon}
-          size={16}
+          size={Math.round(16 * scale)}
           weight="semibold"
           tintColorClassName={
             props.variant === "danger" ? "accent-danger-foreground" : "accent-primary-foreground"

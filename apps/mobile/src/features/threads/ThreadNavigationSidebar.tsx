@@ -1,3 +1,4 @@
+import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { computeThreadMoveAvailability } from "./threadOrder";
 import type {
@@ -133,6 +134,7 @@ function ThreadNavigationSidebarPane(
   const drawerColor = materialTheme["--color-drawer"];
 
   const insets = useSafeAreaInsets();
+  const { fabClearance } = useAndroidControlSizing();
   const projects = useProjects();
   const threads = useThreadShells();
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
@@ -1025,7 +1027,7 @@ function ThreadNavigationSidebarPane(
                   {
                     paddingBottom:
                       Platform.OS === "android"
-                        ? Math.max(insets.bottom, 16) + 148 - insets.bottom
+                        ? Math.max(insets.bottom, 16) + fabClearance - insets.bottom
                         : 16 + insets.bottom,
                     paddingTop: Platform.OS === "android" ? 6 : topListInset,
                   },

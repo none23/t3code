@@ -1,9 +1,10 @@
-import { Box, ExtendedFloatingActionButton, Host, Icon, Text } from "@expo/ui/jetpack-compose";
-import { fillMaxWidth, onSizeChanged, size } from "@expo/ui/jetpack-compose/modifiers";
+import { Box, Host, Icon } from "@expo/ui/jetpack-compose";
+import { fillMaxWidth } from "@expo/ui/jetpack-compose/modifiers";
 import { useCallback, useState } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
-import { useScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
+import { MaterialFab } from "./MaterialFab.android";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 /** Keep the animated width and icon positioning entirely inside Compose, not Yoga. */
 export function MaterialScrollComposeButton(props: {
@@ -13,10 +14,10 @@ export function MaterialScrollComposeButton(props: {
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const { themeAppearance, themeVariables: colors } = useAppearancePreferences();
-  const typography = useScaledTextRole("footnote");
-  const [expandedWidth, setExpandedWidth] = useState(56);
+  const { scale, iconSize, fabSize } = useAndroidControlSizing();
+  const [buttonWidth, setButtonWidth] = useState(fabSize);
   const rememberWidth = useCallback(({ width }: { width: number }) => {
-    setExpandedWidth((previous) => Math.max(previous, width));
+    setButtonWidth(width);
   }, []);
   return (
     <View pointerEvents="box-none" className={props.className} style={[props.style, { left: 20 }]}>
@@ -28,29 +29,18 @@ export function MaterialScrollComposeButton(props: {
           style={{ width: "100%" }}
         >
           <Box modifiers={[fillMaxWidth()]} contentAlignment="centerEnd">
-            <ExtendedFloatingActionButton
+            <MaterialFab
+              primary
+              label="New thread"
               expanded={props.expanded}
-              containerColor={colors["--color-primary"]}
-              modifiers={[onSizeChanged(rememberWidth)]}
+              onSizeChanged={rememberWidth}
             >
-              <ExtendedFloatingActionButton.Icon>
-                <Box modifiers={[size(24, 24)]}>
-                  <Icon
-                    source={require("../../assets/icons/compose.xml")}
-                    size={24}
-                    tint={colors["--color-primary-foreground"]}
-                  />
-                </Box>
-              </ExtendedFloatingActionButton.Icon>
-              <ExtendedFloatingActionButton.Text>
-                <Text
-                  color={colors["--color-primary-foreground"]}
-                  style={{ ...typography, fontWeight: "500" }}
-                >
-                  New thread
-                </Text>
-              </ExtendedFloatingActionButton.Text>
-            </ExtendedFloatingActionButton>
+              <Icon
+                source={require("../../assets/icons/compose.xml")}
+                size={iconSize}
+                tint={colors["--color-primary-foreground"]}
+              />
+            </MaterialFab>
           </Box>
         </Host>
       </View>
@@ -65,8 +55,8 @@ export function MaterialScrollComposeButton(props: {
           right: 0,
           top: 0,
           bottom: 0,
-          width: props.expanded ? expandedWidth : 56,
-          borderRadius: 16,
+          width: buttonWidth,
+          borderRadius: 16 * scale,
           overflow: "hidden",
         }}
       />

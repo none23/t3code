@@ -12,6 +12,7 @@ import { MaterialSearchField } from "../../components/MaterialSearchField";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
 import { WorkspaceConnectionTitle } from "./WorkspaceConnectionTitle";
 import { useWorkspaceState } from "../../state/workspace";
+import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
 import { useMaterialToolbarHeight } from "../../components/useMaterialToolbarHeight";
 
 /** One toolbar height for the compact list and expanded sidebar, including search. */
@@ -28,6 +29,7 @@ export function MaterialThreadListToolbar(props: {
   readonly onRequestVisibility?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { fabSize } = useAndroidControlSizing();
   const toolbarHeight = useMaterialToolbarHeight();
   const { state } = useWorkspaceState();
   const { onRequestVisibility, onSearchQueryChange } = props;
@@ -116,14 +118,14 @@ export function MaterialThreadListToolbar(props: {
           )}
         </View>
       </View>
-      {/* Sit 8dp above the 56dp extended New thread FAB. */}
+      {/* Keep the filter above the New thread FAB at every text size. */}
       {state.hasConnections ? (
         <View
           className="absolute right-5 z-[5]"
           style={{
             bottom:
               (props.sidebar ? Math.max(insets.bottom, 12) + 6 : Math.max(insets.bottom, 16) + 16) +
-              56 +
+              fabSize +
               8,
           }}
         >
