@@ -29,7 +29,7 @@ export function MaterialThreadListToolbar(props: {
   readonly onRequestVisibility?: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { fabSize } = useAndroidControlSizing();
+  const { fabSize, scale } = useAndroidControlSizing();
   const toolbarHeight = useMaterialToolbarHeight();
   const { state } = useWorkspaceState();
   const { onRequestVisibility, onSearchQueryChange } = props;
@@ -78,11 +78,9 @@ export function MaterialThreadListToolbar(props: {
       <View
         onLayout={props.onLayout}
         className={
-          props.sidebar
-            ? "absolute inset-x-0 top-0 z-[4] bg-header px-2 pb-2"
-            : "bg-header px-2 pb-2"
+          props.sidebar ? "absolute inset-x-0 top-0 z-[4] bg-header px-2" : "bg-header px-2"
         }
-        style={{ paddingTop: Math.max(insets.top, 12) }}
+        style={{ paddingTop: Math.max(insets.top, 12 * scale), paddingBottom: 8 * scale }}
       >
         <View className="flex-row items-center gap-1" style={{ minHeight: toolbarHeight }}>
           {searching ? (

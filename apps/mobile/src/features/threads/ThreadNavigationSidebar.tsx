@@ -134,7 +134,7 @@ function ThreadNavigationSidebarPane(
   const drawerColor = materialTheme["--color-drawer"];
 
   const insets = useSafeAreaInsets();
-  const { fabClearance } = useAndroidControlSizing();
+  const { fabClearance, scale } = useAndroidControlSizing();
   const projects = useProjects();
   const threads = useThreadShells();
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
@@ -602,7 +602,7 @@ function ThreadNavigationSidebarPane(
   const stickyHeaderHeight =
     measuredHeaderHeight ??
     (Platform.OS === "android"
-      ? Math.max(insets.top, 12) + materialToolbarHeight + 8
+      ? Math.max(insets.top, 12 * scale) + materialToolbarHeight + 8 * scale
       : insets.top + SIDEBAR_STICKY_HEADER_HEIGHT);
   const topListInset = stickyHeaderHeight + 6;
   const handleStickyHeaderLayout = useCallback((event: LayoutChangeEvent) => {

@@ -11,10 +11,12 @@ import { ControlPillMenu } from "./ControlPill";
 import { MaterialSearchField } from "./MaterialSearchField";
 import { androidHeaderMenuActions, findHeaderMenuAction } from "./headerMenu.android";
 import type { ScreenHeaderProps } from "./ScreenHeader.types";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 export function ScreenHeader(props: ScreenHeaderProps) {
   const { search } = props;
   const insets = useSafeAreaInsets();
+  const { scale } = useAndroidControlSizing();
   const { themeVariables } = useAppearancePreferences();
   const inputRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -80,8 +82,12 @@ export function ScreenHeader(props: ScreenHeaderProps) {
       <>
         {options}
         <View
-          className="border-b border-header-border bg-header px-3 pb-2.5"
-          style={{ paddingTop: Math.max(insets.top, 12), borderBottomWidth: 0 }}
+          className="border-b border-header-border bg-header px-3"
+          style={{
+            paddingTop: Math.max(insets.top, 12 * scale),
+            paddingBottom: 10 * scale,
+            borderBottomWidth: 0,
+          }}
         >
           <View className="min-h-12 flex-row items-center gap-2">
             {props.onBack ? (
@@ -174,10 +180,10 @@ export function ScreenHeader(props: ScreenHeaderProps) {
           </View>
           {searching ? (
             <View
-              className="absolute inset-0 bg-header px-2 pb-2"
-              style={{ paddingTop: Math.max(insets.top, 12) }}
+              className="absolute inset-0 bg-header px-2"
+              style={{ paddingTop: Math.max(insets.top, 12 * scale), paddingBottom: 8 * scale }}
             >
-              <View className="min-h-14 flex-1 flex-row items-center gap-1">
+              <View className="flex-1 flex-row items-center gap-1">
                 <ScreenHeaderButton
                   accessibilityLabel={search.closeAccessibilityLabel ?? "Close search"}
                   icon="arrow.left"

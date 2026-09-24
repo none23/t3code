@@ -6,6 +6,7 @@ import { AppText as Text } from "./AppText";
 import { T3Wordmark } from "./T3Wordmark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../lib/mobileBranding";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 /**
  * Horizontal correction applied to content rendered in the brand title slot,
@@ -26,6 +27,7 @@ export function CompactBrandTitle(
 ) {
   const stageLabel = resolveMobileStageLabel(Constants.expoConfig?.extra?.appVariant);
   const titleOffset = brandTitleOffset();
+  const { scale } = useAndroidControlSizing();
 
   return (
     <View
@@ -33,20 +35,25 @@ export function CompactBrandTitle(
       accessibilityLabel="T3 Code, Threads"
       accessible
       role="heading"
-      className="flex-row items-center gap-1.5"
-      style={{ marginLeft: titleOffset }}
+      className="flex-row items-center"
+      style={{ marginLeft: titleOffset, gap: 6 * scale }}
     >
-      <T3Wordmark colorClassName="accent-icon" height={15} />
+      <T3Wordmark colorClassName="accent-icon" height={15 * scale} />
       <Text
         allowFontScaling={props.allowFontScaling}
-        className="font-t3-medium text-[21px] tracking-[-0.5px] text-foreground-muted"
+        className="font-t3-medium text-foreground-muted"
+        style={{ fontSize: 21 * scale, letterSpacing: -0.5 * scale }}
       >
         Code
       </Text>
-      <View className="rounded-full bg-subtle px-1.5 py-0.5">
+      <View
+        className="rounded-full bg-subtle"
+        style={{ paddingHorizontal: 6 * scale, paddingVertical: 2 * scale }}
+      >
         <Text
           allowFontScaling={props.allowFontScaling}
-          className="font-t3-bold text-[9px] tracking-[0.9px] text-foreground-muted uppercase"
+          className="font-t3-bold text-foreground-muted uppercase"
+          style={{ fontSize: 9 * scale, letterSpacing: 0.9 * scale }}
         >
           {stageLabel}
         </Text>
