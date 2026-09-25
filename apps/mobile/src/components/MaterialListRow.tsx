@@ -5,6 +5,7 @@ import { useAppearancePreferences } from "../features/settings/appearance/Appear
 import { cn } from "../lib/cn";
 import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 /** Shared geometry for Material navigation and selection lists. Group rows in one card. */
 export function MaterialListRow({
@@ -23,6 +24,7 @@ export function MaterialListRow({
   readonly trailing?: ReactNode;
 }) {
   const { themeVariables } = useAppearancePreferences();
+  const { scale } = useAndroidControlSizing();
   return (
     <Pressable
       accessibilityRole="button"
@@ -52,7 +54,11 @@ export function MaterialListRow({
       {trailing !== undefined ? (
         trailing
       ) : !props.disabled ? (
-        <SymbolView name="chevron.right" size={16} tintColorClassName="accent-chevron" />
+        <SymbolView
+          name="chevron.right"
+          size={Math.round(16 * scale)}
+          tintColorClassName="accent-chevron"
+        />
       ) : null}
     </Pressable>
   );
