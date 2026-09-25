@@ -31,7 +31,7 @@ export function ComposerInlineControl(props: {
   readonly disabled?: boolean;
   readonly emphasized?: boolean;
   readonly icon?: ComponentProps<typeof SymbolView>["name"];
-  readonly iconNode?: ReactNode;
+  readonly renderIcon?: (size: number) => ReactNode;
   readonly label: string;
   readonly maxWidth?: ViewStyle["maxWidth"];
   readonly onPress?: () => void;
@@ -40,6 +40,7 @@ export function ComposerInlineControl(props: {
   readonly chevronDirection?: "down" | "right";
   readonly showChevron?: boolean;
 }) {
+  const { scale, smallIconSize } = useAndroidControlSizing();
   return (
     <Pressable
       accessibilityLabel={props.accessibilityLabel ?? props.label}
@@ -53,12 +54,17 @@ export function ComposerInlineControl(props: {
       onPress={props.onPress}
       style={{ maxWidth: props.maxWidth ?? 190, opacity: props.disabled ? 0.45 : 1 }}
     >
-      {props.iconNode ? (
-        <View className="size-4 shrink-0 items-center justify-center">{props.iconNode}</View>
+      {props.renderIcon ? (
+        <View
+          className="shrink-0 items-center justify-center"
+          style={{ width: smallIconSize, height: smallIconSize }}
+        >
+          {props.renderIcon(smallIconSize)}
+        </View>
       ) : props.icon ? (
         <SymbolView
           name={props.icon}
-          size={16}
+          size={smallIconSize}
           tintColorClassName={
             props.emphasized || props.selected ? "accent-icon" : "accent-icon-muted"
           }
@@ -77,7 +83,7 @@ export function ComposerInlineControl(props: {
       {props.showChevron === false ? null : (
         <SymbolView
           name={props.chevronDirection === "right" ? "chevron.right" : "chevron.down"}
-          size={10}
+          size={Math.round(10 * scale)}
           tintColorClassName={
             props.emphasized || props.selected ? "accent-icon" : "accent-icon-muted"
           }

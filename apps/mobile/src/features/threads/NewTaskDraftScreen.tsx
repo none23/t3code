@@ -132,12 +132,13 @@ import { fileRoutePathSegments } from "../files/filePath";
 function NewTaskWorkspaceIcon(props: {
   readonly workspaceMode: "local" | "worktree";
   readonly worktreePath: string | null;
+  readonly size: number;
 }) {
   if (props.workspaceMode === "local" && props.worktreePath === null) {
     return (
       <SymbolView
         name="folder"
-        size={16}
+        size={props.size}
         tintColorClassName="accent-icon-muted"
         type="monochrome"
       />
@@ -145,17 +146,17 @@ function NewTaskWorkspaceIcon(props: {
   }
 
   return (
-    <View className="size-4">
+    <View style={{ width: props.size, height: props.size }}>
       <SymbolView
         name="folder"
-        size={16}
+        size={props.size}
         tintColorClassName="accent-icon-muted"
         type="monochrome"
       />
-      <View className="absolute -right-1 -bottom-1">
+      <View className="absolute" style={{ right: -props.size / 4, bottom: -props.size / 4 }}>
         <SymbolView
           name="arrow.triangle.branch"
-          size={9}
+          size={Math.round((9 * props.size) / 16)}
           tintColorClassName="accent-icon-muted"
           type="monochrome"
         />
@@ -1476,13 +1477,13 @@ export function NewTaskDraftScreen(props: {
         accessibilityLabel={`Environment: ${selectedEnvironmentLabel}`}
         chevronDirection="right"
         disabled={isComposerInteractionLocked || voiceInput.isBusy}
-        iconNode={
+        renderIcon={(size) => (
           <EnvironmentMachineSymbol
             kind={resolveEnvironmentMachineKind(selectedEnvironmentServerConfig)}
-            size={16}
+            size={size}
             tintColorClassName="accent-icon-muted"
           />
-        }
+        )}
         label={`on ${selectedEnvironmentLabel}`}
         maxWidth={260}
         onPress={
@@ -1517,12 +1518,13 @@ export function NewTaskDraftScreen(props: {
         accessibilityHint={`Switches to ${flow.workspaceMode === "local" ? "a new worktree" : "the current checkout"}`}
         accessibilityLabel={workspaceLabel}
         disabled={isComposerInteractionLocked || voiceInput.isBusy}
-        iconNode={
+        renderIcon={(size) => (
           <NewTaskWorkspaceIcon
             workspaceMode={flow.workspaceMode}
             worktreePath={flow.selectedWorktreePath}
+            size={size}
           />
-        }
+        )}
         label={workspaceLabel}
         maxWidth={flow.workspaceMode === "local" ? 220 : 148}
         onPress={() => flow.setWorkspaceMode(flow.workspaceMode === "local" ? "worktree" : "local")}
@@ -1681,12 +1683,12 @@ export function NewTaskDraftScreen(props: {
                         accessibilityLabel="Model and reasoning settings"
                         disabled={isComposerInteractionLocked}
                         emphasized
-                        iconNode={
+                        renderIcon={(size) => (
                           <ProviderIcon
                             provider={flow.selectedModelOption?.providerDriver}
-                            size={16}
+                            size={size}
                           />
-                        }
+                        )}
                         label={flow.selectedModelOption?.label ?? "Choose model"}
                         maxWidth="100%"
                         onPress={settingsSheetPresentation.open}
