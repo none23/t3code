@@ -82,12 +82,6 @@ export function MaterialMenuPopup(props: MaterialMenuPopupProps) {
           key={action.id ?? `${index}-${action.title}`}
           enabled={!action.attributes?.disabled}
           modifiers={itemModifiers}
-          elementColors={{
-            textColor: action.attributes?.destructive
-              ? colors["--color-danger-foreground"]
-              : foreground,
-            disabledTextColor: muted,
-          }}
           onClick={() => props.onPress(action)}
         >
           {action.image && isAppSymbolName(action.image) ? (
