@@ -19,7 +19,7 @@ export function MaterialSearchField({
   readonly value: string;
   readonly onChangeText: (value: string) => void;
 }) {
-  const { scale, buttonSize } = useAndroidControlSizing();
+  const { scale, buttonSize, mediumIconSize } = useAndroidControlSizing();
   return (
     <View
       className="min-w-0 flex-1 flex-row items-center rounded-full border border-input-border bg-input"
@@ -27,7 +27,7 @@ export function MaterialSearchField({
     >
       <SymbolView
         name="magnifyingglass"
-        size={18 * scale}
+        size={mediumIconSize}
         tintColorClassName="accent-foreground-muted"
       />
       <TextInput
@@ -59,7 +59,7 @@ export function MaterialSearchField({
         >
           <SymbolView
             name="xmark.circle.fill"
-            size={18 * scale}
+            size={mediumIconSize}
             tintColorClassName="accent-foreground-muted"
           />
         </Pressable>

@@ -24,7 +24,7 @@ export function MaterialListRow({
   readonly trailing?: ReactNode;
 }) {
   const { themeVariables } = useAppearancePreferences();
-  const { scale } = useAndroidControlSizing();
+  const { smallIconSize } = useAndroidControlSizing();
   return (
     <Pressable
       accessibilityRole="button"
@@ -54,11 +54,7 @@ export function MaterialListRow({
       {trailing !== undefined ? (
         trailing
       ) : !props.disabled ? (
-        <SymbolView
-          name="chevron.right"
-          size={Math.round(16 * scale)}
-          tintColorClassName="accent-chevron"
-        />
+        <SymbolView name="chevron.right" size={smallIconSize} tintColorClassName="accent-chevron" />
       ) : null}
     </Pressable>
   );

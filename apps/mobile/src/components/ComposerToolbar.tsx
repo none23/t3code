@@ -225,7 +225,7 @@ export function ComposerActionButton(props: {
   readonly onPress: () => void;
   readonly variant?: "primary" | "danger";
 }) {
-  const { scale } = useAndroidControlSizing();
+  const { scale, smallIconSize } = useAndroidControlSizing();
   const circleSize = Math.round(30 * scale);
   return (
     <Pressable
@@ -249,7 +249,7 @@ export function ComposerActionButton(props: {
       >
         <SymbolView
           name={props.icon}
-          size={Math.round(16 * scale)}
+          size={smallIconSize}
           weight="semibold"
           tintColorClassName={
             props.variant === "danger" ? "accent-danger-foreground" : "accent-primary-foreground"

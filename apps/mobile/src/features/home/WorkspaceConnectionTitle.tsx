@@ -133,12 +133,12 @@ export function WorkspaceConnectionTitle(props: {
         {status.showsProgress ? (
           <ActivityIndicator
             colorClassName={"accent-icon-muted"}
-            size={Platform.OS === "android" ? 20 * scale : "small"}
+            size={Platform.OS === "android" ? Math.round(20 * scale) : "small"}
           />
         ) : (
           <SymbolView
             name="wifi.slash"
-            size={(size === "pageTitle" ? 17 : 15) * scale}
+            size={Math.round((size === "pageTitle" ? 17 : 15) * scale)}
             tintColorClassName={"accent-icon-muted"}
             type="monochrome"
           />

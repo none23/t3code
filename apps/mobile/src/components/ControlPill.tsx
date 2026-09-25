@@ -21,7 +21,7 @@ export function ControlPill(props: {
   readonly className?: string;
 }) {
   const variant = props.variant ?? "circle";
-  const { scale } = useAndroidControlSizing();
+  const { smallIconSize } = useAndroidControlSizing();
   const activatedOnPressInRef = useRef(false);
 
   const handlePressIn = () => {
@@ -135,7 +135,7 @@ export function ControlPill(props: {
       ) : props.icon ? (
         <SymbolView
           name={props.icon}
-          size={Math.round(16 * scale)}
+          size={smallIconSize}
           tintColorClassName={iconTintClassName}
           type="monochrome"
         />

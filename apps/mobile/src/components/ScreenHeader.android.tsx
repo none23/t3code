@@ -16,7 +16,7 @@ import { useAndroidControlSizing } from "./useAndroidControlSizing";
 export function ScreenHeader(props: ScreenHeaderProps) {
   const { search } = props;
   const insets = useSafeAreaInsets();
-  const { scale, buttonSize } = useAndroidControlSizing();
+  const { scale, buttonSize, iconSize, smallIconSize } = useAndroidControlSizing();
   const { themeVariables } = useAppearancePreferences();
   const inputRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -55,7 +55,7 @@ export function ScreenHeader(props: ScreenHeaderProps) {
         >
           <SymbolView
             name={menu.icon}
-            size={16 * scale}
+            size={smallIconSize}
             tintColorClassName="accent-header-foreground"
             type="monochrome"
           />
@@ -102,7 +102,7 @@ export function ScreenHeader(props: ScreenHeaderProps) {
               >
                 <SymbolView
                   name="chevron.left"
-                  size={24 * scale}
+                  size={iconSize}
                   tintColorClassName="accent-header-foreground"
                   type="monochrome"
                 />
@@ -119,7 +119,7 @@ export function ScreenHeader(props: ScreenHeaderProps) {
             >
               <SymbolView
                 name="magnifyingglass"
-                size={17 * scale}
+                size={Math.round(17 * scale)}
                 tintColorClassName="accent-header-foreground"
                 type="monochrome"
               />

@@ -38,7 +38,7 @@ export function CompactBrandTitle(
       className="flex-row items-center"
       style={{ marginLeft: titleOffset, gap: 6 * scale }}
     >
-      <T3Wordmark colorClassName="accent-icon" height={15 * scale} />
+      <T3Wordmark colorClassName="accent-icon" height={Math.round(15 * scale)} />
       <Text
         allowFontScaling={props.allowFontScaling}
         className="font-t3-medium text-foreground-muted"

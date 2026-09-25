@@ -19,8 +19,7 @@ import { useAndroidControlSizing } from "./useAndroidControlSizing";
 export function MaterialButton(props: MaterialButtonProps) {
   const { themeAppearance, themeVariables: colors } = useAppearancePreferences();
   const typography = useScaledTextRole("footnote");
-  const { scale } = useAndroidControlSizing();
-  const loadingIndicatorSize = Math.round(18 * scale);
+  const { scale, mediumIconSize } = useAndroidControlSizing();
   const tone = props.tone ?? "secondary";
   const Component =
     tone === "text" ? TextButton : tone === "secondary" ? FilledTonalButton : Button;
@@ -80,7 +79,7 @@ export function MaterialButton(props: MaterialButtonProps) {
               {props.loading ? (
                 <>
                   <CircularProgressIndicator
-                    modifiers={[size(loadingIndicatorSize, loadingIndicatorSize)]}
+                    modifiers={[size(mediumIconSize, mediumIconSize)]}
                     strokeWidth={2}
                     color={colors["--color-foreground-muted"]}
                   />
