@@ -1,5 +1,4 @@
 import {
-  Box,
   FilledIconButton,
   FilledTonalIconButton,
   Host,
@@ -22,8 +21,7 @@ export function MaterialIconButton(props: {
   readonly tintColorClassName?: string;
 }) {
   const { themeAppearance, themeVariables: colors } = useAppearancePreferences();
-  const { scale, iconSize, buttonSize } = useAndroidControlSizing();
-  const visualSize = Math.round(48 * scale);
+  const { iconSize, buttonSize } = useAndroidControlSizing();
   const variant = props.variant ?? "standard";
   const Component =
     variant === "standard"
@@ -64,20 +62,18 @@ export function MaterialIconButton(props: {
           ignoreSafeAreaKeyboardInsets
           style={{ width: buttonSize, height: buttonSize }}
         >
-          <Box modifiers={[size(buttonSize, buttonSize)]} contentAlignment="center">
-            <Component
-              onClick={props.onPress}
-              enabled={!props.disabled}
-              modifiers={[size(visualSize, visualSize)]}
-              colors={
-                variant === "standard"
-                  ? undefined
-                  : { containerColor, disabledContainerColor: colors["--color-subtle-strong"] }
-              }
-            >
-              {null}
-            </Component>
-          </Box>
+          <Component
+            onClick={props.onPress}
+            enabled={!props.disabled}
+            modifiers={[size(buttonSize, buttonSize)]}
+            colors={
+              variant === "standard"
+                ? undefined
+                : { containerColor, disabledContainerColor: colors["--color-subtle-strong"] }
+            }
+          >
+            {null}
+          </Component>
         </Host>
       </View>
       {/* Keep RN SVG measurement outside Compose; the native button owns touch and ripple. */}
