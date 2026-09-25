@@ -146,14 +146,24 @@ function NewTaskWorkspaceIcon(props: {
   }
 
   return (
-    <View style={{ width: props.size, height: props.size }}>
+    <View
+      className="size-4"
+      style={Platform.OS === "android" ? { width: props.size, height: props.size } : undefined}
+    >
       <SymbolView
         name="folder"
         size={props.size}
         tintColorClassName="accent-icon-muted"
         type="monochrome"
       />
-      <View className="absolute" style={{ right: -props.size / 4, bottom: -props.size / 4 }}>
+      <View
+        className="absolute -right-1 -bottom-1"
+        style={
+          Platform.OS === "android"
+            ? { right: -props.size / 4, bottom: -props.size / 4 }
+            : undefined
+        }
+      >
         <SymbolView
           name="arrow.triangle.branch"
           size={Math.round((9 * props.size) / 16)}

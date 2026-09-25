@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import {
+  Platform,
   Pressable,
   ScrollView,
   View,
@@ -56,8 +57,10 @@ export function ComposerInlineControl(props: {
     >
       {props.renderIcon ? (
         <View
-          className="shrink-0 items-center justify-center"
-          style={{ width: smallIconSize, height: smallIconSize }}
+          className="size-4 shrink-0 items-center justify-center"
+          style={
+            Platform.OS === "android" ? { width: smallIconSize, height: smallIconSize } : undefined
+          }
         >
           {props.renderIcon(smallIconSize)}
         </View>
