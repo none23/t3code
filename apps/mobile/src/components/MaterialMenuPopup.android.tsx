@@ -1,12 +1,13 @@
-import { Box, Column, DropdownMenu, Row, Host, RNHostView, Text } from "@expo/ui/jetpack-compose";
 import {
-  clickable,
-  defaultMinSize,
-  padding,
-  size,
-  weight,
-  width,
-} from "@expo/ui/jetpack-compose/modifiers";
+  Box,
+  Column,
+  DropdownMenu,
+  DropdownMenuItem,
+  Host,
+  RNHostView,
+  Text,
+} from "@expo/ui/jetpack-compose";
+import { defaultMinSize, padding, size, width } from "@expo/ui/jetpack-compose/modifiers";
 import { View } from "react-native";
 import { resolveScaledTextRole } from "../lib/appearancePreferences";
 
@@ -54,20 +55,19 @@ export function MaterialMenuPopup(props: MaterialMenuPopupProps) {
   const muted = colors["--color-foreground-muted"];
   // A fixed native item height clips wrapped labels; a minimum lets each row grow.
   const itemModifiers = [width(menuWidth), defaultMinSize({ minHeight: menuItemHeight })];
-  const itemPadding = padding(16 * scale, 8 * scale, 16 * scale, 8 * scale);
   const items = (
     <>
       {props.parent ? (
-        <Row
-          verticalAlignment="center"
-          horizontalArrangement={{ spacedBy: 12 * scale }}
-          modifiers={[...itemModifiers, clickable(props.onBack), itemPadding]}
-        >
-          <MenuIcon name="arrow.left" />
-          <Text color={foreground} style={body} modifiers={[weight(1)]}>
-            {props.parent.title}
-          </Text>
-        </Row>
+        <DropdownMenuItem onClick={props.onBack} modifiers={itemModifiers}>
+          <DropdownMenuItem.LeadingIcon>
+            <MenuIcon name="arrow.left" />
+          </DropdownMenuItem.LeadingIcon>
+          <DropdownMenuItem.Text>
+            <Text color={foreground} style={body}>
+              {props.parent.title}
+            </Text>
+          </DropdownMenuItem.Text>
+        </DropdownMenuItem>
       ) : props.title ? (
         <Text
           color={muted}
@@ -78,48 +78,58 @@ export function MaterialMenuPopup(props: MaterialMenuPopupProps) {
         </Text>
       ) : null}
       {props.actions.map((action, index) => (
-        <Row
+        <DropdownMenuItem
           key={action.id ?? `${index}-${action.title}`}
-          verticalAlignment="center"
-          horizontalArrangement={{ spacedBy: 12 * scale }}
-          modifiers={[
-            ...itemModifiers,
-            ...(action.attributes?.disabled ? [] : [clickable(() => props.onPress(action))]),
-            itemPadding,
-          ]}
+          enabled={!action.attributes?.disabled}
+          modifiers={itemModifiers}
+          elementColors={{
+            textColor: action.attributes?.destructive
+              ? colors["--color-danger-foreground"]
+              : foreground,
+            disabledTextColor: muted,
+          }}
+          onClick={() => props.onPress(action)}
         >
           {action.image && isAppSymbolName(action.image) ? (
-            <MenuIcon
-              name={action.image}
-              destructive={action.attributes?.destructive}
-              disabled={action.attributes?.disabled}
-            />
+            <DropdownMenuItem.LeadingIcon>
+              <MenuIcon
+                name={action.image}
+                destructive={action.attributes?.destructive}
+                disabled={action.attributes?.disabled}
+              />
+            </DropdownMenuItem.LeadingIcon>
           ) : null}
-          <Column modifiers={[weight(1)]}>
-            <Text
-              style={body}
-              color={
-                action.attributes?.disabled
-                  ? muted
-                  : action.attributes?.destructive
-                    ? colors["--color-danger-foreground"]
-                    : foreground
-              }
-            >
-              {action.title}
-            </Text>
-            {action.subtitle ? (
-              <Text color={muted} style={caption}>
-                {action.subtitle}
+          <DropdownMenuItem.Text>
+            <Column>
+              <Text
+                style={body}
+                color={
+                  action.attributes?.disabled
+                    ? muted
+                    : action.attributes?.destructive
+                      ? colors["--color-danger-foreground"]
+                      : foreground
+                }
+              >
+                {action.title}
               </Text>
-            ) : null}
-          </Column>
+              {action.subtitle ? (
+                <Text color={muted} style={caption}>
+                  {action.subtitle}
+                </Text>
+              ) : null}
+            </Column>
+          </DropdownMenuItem.Text>
           {(action.subactions?.length ?? 0) > 0 ? (
-            <MenuIcon name="chevron.right" disabled={action.attributes?.disabled} />
+            <DropdownMenuItem.TrailingIcon>
+              <MenuIcon name="chevron.right" disabled={action.attributes?.disabled} />
+            </DropdownMenuItem.TrailingIcon>
           ) : action.state === "on" ? (
-            <MenuIcon name="checkmark" disabled={action.attributes?.disabled} />
+            <DropdownMenuItem.TrailingIcon>
+              <MenuIcon name="checkmark" disabled={action.attributes?.disabled} />
+            </DropdownMenuItem.TrailingIcon>
           ) : null}
-        </Row>
+        </DropdownMenuItem>
       ))}
     </>
   );
