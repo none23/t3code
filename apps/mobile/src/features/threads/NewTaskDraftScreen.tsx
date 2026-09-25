@@ -145,10 +145,11 @@ function NewTaskWorkspaceIcon(props: {
     );
   }
 
+  const boxSize = (14 * props.size) / 16;
   return (
     <View
       className="size-4"
-      style={Platform.OS === "android" ? { width: props.size, height: props.size } : undefined}
+      style={Platform.OS === "android" ? { width: boxSize, height: boxSize } : undefined}
     >
       <SymbolView
         name="folder"
@@ -159,9 +160,7 @@ function NewTaskWorkspaceIcon(props: {
       <View
         className="absolute -right-1 -bottom-1"
         style={
-          Platform.OS === "android"
-            ? { right: -props.size / 4, bottom: -props.size / 4 }
-            : undefined
+          Platform.OS === "android" ? { right: -boxSize / 4, bottom: -boxSize / 4 } : undefined
         }
       >
         <SymbolView

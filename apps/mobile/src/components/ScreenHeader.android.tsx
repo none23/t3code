@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Keyboard, Pressable, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useMaterialToolbarLayout } from "./useMaterialToolbarLayout";
 import { NativeStackScreenOptions } from "../native/StackHeader";
 import { AndroidWorkspaceSidebarButton } from "../features/layout/workspace-sidebar-toolbar";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
@@ -15,7 +15,7 @@ import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 export function ScreenHeader(props: ScreenHeaderProps) {
   const { search } = props;
-  const insets = useSafeAreaInsets();
+  const { paddingTop, paddingBottom } = useMaterialToolbarLayout();
   const { scale, buttonSize, iconSize, smallIconSize } = useAndroidControlSizing();
   const { themeVariables } = useAppearancePreferences();
   const inputRef = useRef<TextInput>(null);
@@ -85,8 +85,8 @@ export function ScreenHeader(props: ScreenHeaderProps) {
         <View
           className="border-b border-header-border bg-header px-3"
           style={{
-            paddingTop: Math.max(insets.top, 12 * scale),
-            paddingBottom: 10 * scale,
+            paddingTop,
+            paddingBottom: 8.75 * scale,
             borderBottomWidth: 0,
           }}
         >
@@ -111,10 +111,10 @@ export function ScreenHeader(props: ScreenHeaderProps) {
             <View
               className="flex-1 flex-row items-center bg-input"
               style={{
-                minHeight: Math.max(44, 44 * scale),
-                gap: 10 * scale,
-                borderRadius: 16 * scale,
-                paddingHorizontal: 14 * scale,
+                minHeight: Math.max(48, 38.5 * scale),
+                gap: 8.75 * scale,
+                borderRadius: 14 * scale,
+                paddingHorizontal: 12.25 * scale,
               }}
             >
               <SymbolView
@@ -135,7 +135,7 @@ export function ScreenHeader(props: ScreenHeaderProps) {
                 }
                 placeholderTextColorClassName="accent-placeholder"
                 className="flex-1 text-base font-sans text-header-foreground"
-                style={{ paddingVertical: 8 * scale }}
+                style={{ paddingVertical: 7 * scale }}
               />
             </View>
             {menuView}
@@ -194,10 +194,7 @@ export function ScreenHeader(props: ScreenHeaderProps) {
             {header}
           </View>
           {searching ? (
-            <View
-              className="absolute inset-0 bg-header px-2"
-              style={{ paddingTop: Math.max(insets.top, 12 * scale), paddingBottom: 8 * scale }}
-            >
+            <View className="absolute inset-0 bg-header px-2" style={{ paddingTop, paddingBottom }}>
               <View className="flex-1 flex-row items-center gap-1">
                 <ScreenHeaderButton
                   accessibilityLabel={search.closeAccessibilityLabel ?? "Close search"}

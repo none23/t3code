@@ -130,7 +130,7 @@ export function WorkspaceConnectionTitle(props: {
         className="flex-row items-center gap-2"
         style={[
           { flexShrink: 1, marginLeft: props.statusOffset ?? 0 },
-          Platform.OS === "android" && { gap: 8 * scale },
+          Platform.OS === "android" && { gap: 7 * scale },
         ]}
       >
         {status.showsProgress ? (

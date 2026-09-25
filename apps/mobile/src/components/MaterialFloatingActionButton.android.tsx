@@ -78,9 +78,7 @@ export function MaterialFloatingActionButton(props: {
         pointerEvents="none"
         className="absolute inset-y-0 justify-center"
         style={
-          props.variant === "extended" && props.expanded !== false
-            ? { left: 16 }
-            : { left: 0, right: 0, alignItems: "center" }
+          props.variant === "extended" ? { left: 16 } : { left: 0, right: 0, alignItems: "center" }
         }
       >
         <SymbolView

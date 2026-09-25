@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { AppSymbolName } from "./AppSymbol";
 import { AppText as Text } from "./AppText";
@@ -8,8 +7,7 @@ import { cn } from "../lib/cn";
 import { MaterialIconButton } from "./MaterialIconButton";
 import { AndroidAnchoredMenu } from "./AndroidAnchoredMenu";
 import { useScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
-import { useMaterialToolbarHeight } from "./useMaterialToolbarHeight";
-import { useAndroidControlSizing } from "./useAndroidControlSizing";
+import { useMaterialToolbarLayout } from "./useMaterialToolbarLayout";
 
 export interface AndroidHeaderAction {
   readonly accessibilityLabel: string;
@@ -39,11 +37,11 @@ export function AndroidScreenHeader(props: {
   readonly embedded?: boolean;
   readonly hideBottomBorder?: boolean;
 }) {
-  const insets = useSafeAreaInsets();
   const titleTypography = useScaledTextRole("title");
   const subtitleTypography = useScaledTextRole("label");
-  const materialToolbarHeight = useMaterialToolbarHeight();
-  const { scale } = useAndroidControlSizing();
+  const { height: materialToolbarHeight, ...headerPadding } = useMaterialToolbarLayout(
+    props.embedded,
+  );
   const [headerWidth, setHeaderWidth] = useState(0);
   const actions = props.actions ?? [];
   const directCount = actions.length > 2 ? (headerWidth >= 600 ? 3 : 1) : actions.length;
@@ -55,8 +53,7 @@ export function AndroidScreenHeader(props: {
       onLayout={(event) => setHeaderWidth(event.nativeEvent.layout.width)}
       className="border-b border-header-border bg-header px-2"
       style={{
-        paddingTop: props.embedded ? 8 * scale : Math.max(insets.top, 12 * scale),
-        paddingBottom: 8 * scale,
+        ...headerPadding,
         borderBottomWidth: props.hideBottomBorder ? 0 : undefined,
       }}
     >

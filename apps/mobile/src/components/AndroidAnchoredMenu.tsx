@@ -55,7 +55,7 @@ export type AndroidAnchoredMenuProps = {
  * menus use the native popup for placement, animation and dismissal.
  */
 export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
-  const { scale, menuWidth } = useAndroidControlSizing();
+  const { scale, menuWidth: desiredMenuWidth } = useAndroidControlSizing();
   const [anchor, setAnchor] = useState<AnchorSnapshot | null>(null);
   const [path, setPath] = useState<readonly MenuAction[]>([]);
   // Height of the modal's root view, in the modal's own coordinate space.
@@ -69,6 +69,10 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
   // are converted into this frame, so the menu lands correctly no matter
   // where the portal host sits (status bar, keyboard resize, etc.).
   const [overlay, setOverlay] = useState<OverlayFrame | null>(null);
+  const menuWidth =
+    overlay === null
+      ? desiredMenuWidth
+      : Math.min(desiredMenuWidth, Math.max(0, overlay.width - 2 * SCREEN_MARGIN));
   const anchorRef = useRef<View>(null);
   const overlayRef = useRef<View>(null);
 
@@ -199,6 +203,7 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
             {!placeable || local === null ? null : !anchor.keyboardWasVisible ? (
               <MaterialMenuPopup
                 anchor={local}
+                menuWidth={menuWidth}
                 actions={levelActions}
                 title={props.title}
                 parent={parent}
@@ -227,7 +232,7 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
                   active editor; the first item tap must act, not just
                   dismiss the keyboard. */}
                 <ScrollView
-                  contentContainerStyle={{ paddingVertical: 8 * scale }}
+                  contentContainerStyle={{ paddingVertical: 7 * scale }}
                   bounces={false}
                   keyboardShouldPersistTaps="always"
                   showsVerticalScrollIndicator={false}
@@ -235,6 +240,7 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
                   <MaterialMenuPopup
                     inline
                     anchor={local}
+                    menuWidth={menuWidth}
                     actions={levelActions}
                     title={props.title}
                     parent={parent}

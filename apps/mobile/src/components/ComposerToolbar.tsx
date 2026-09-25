@@ -58,9 +58,7 @@ export function ComposerInlineControl(props: {
       {props.renderIcon ? (
         <View
           className="size-4 shrink-0 items-center justify-center"
-          style={
-            Platform.OS === "android" ? { width: smallIconSize, height: smallIconSize } : undefined
-          }
+          style={Platform.OS === "android" ? { width: 14 * scale, height: 14 * scale } : undefined}
         >
           {props.renderIcon(smallIconSize)}
         </View>

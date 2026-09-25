@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { BackHandler, Keyboard, type TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AndroidHeaderIconButton, AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AndroidAnchoredMenu } from "../../components/AndroidAnchoredMenu";
 import { MaterialSearchField } from "../../components/MaterialSearchField";
-import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
+import { useMaterialToolbarLayout } from "../../components/useMaterialToolbarLayout";
 
 /** Keep Files search in the same header row on compact and expanded layouts. */
 export function MaterialFilesHeader(props: {
@@ -16,8 +15,7 @@ export function MaterialFilesHeader(props: {
   readonly onBack?: () => void;
   readonly leading?: ReactNode;
 }) {
-  const insets = useSafeAreaInsets();
-  const { scale } = useAndroidControlSizing();
+  const { paddingTop, paddingBottom } = useMaterialToolbarLayout();
   const searchRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const searching = searchOpen || props.searchQuery.length > 0;
@@ -79,10 +77,7 @@ export function MaterialFilesHeader(props: {
         />
       </View>
       {searching ? (
-        <View
-          className="absolute inset-0 bg-header px-2"
-          style={{ paddingTop: Math.max(insets.top, 12 * scale), paddingBottom: 8 * scale }}
-        >
+        <View className="absolute inset-0 bg-header px-2" style={{ paddingTop, paddingBottom }}>
           <View className="flex-1 flex-row items-center gap-1">
             <AndroidHeaderIconButton
               accessibilityLabel="Close file search"

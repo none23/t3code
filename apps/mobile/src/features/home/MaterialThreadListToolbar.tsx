@@ -13,7 +13,7 @@ import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands
 import { WorkspaceConnectionTitle } from "./WorkspaceConnectionTitle";
 import { useWorkspaceState } from "../../state/workspace";
 import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
-import { useMaterialToolbarHeight } from "../../components/useMaterialToolbarHeight";
+import { useMaterialToolbarLayout } from "../../components/useMaterialToolbarLayout";
 
 /** One toolbar height for the compact list and expanded sidebar, including search. */
 export function MaterialThreadListToolbar(props: {
@@ -29,8 +29,8 @@ export function MaterialThreadListToolbar(props: {
   readonly onRequestVisibility?: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { fabSize, scale } = useAndroidControlSizing();
-  const toolbarHeight = useMaterialToolbarHeight();
+  const { fabSize } = useAndroidControlSizing();
+  const { height: toolbarHeight, ...headerPadding } = useMaterialToolbarLayout();
   const { state } = useWorkspaceState();
   const { onRequestVisibility, onSearchQueryChange } = props;
   const searchRef = useRef<TextInput>(null);
@@ -80,7 +80,7 @@ export function MaterialThreadListToolbar(props: {
         className={
           props.sidebar ? "absolute inset-x-0 top-0 z-[4] bg-header px-2" : "bg-header px-2"
         }
-        style={{ paddingTop: Math.max(insets.top, 12 * scale), paddingBottom: 8 * scale }}
+        style={headerPadding}
       >
         <View className="flex-row items-center gap-1" style={{ minHeight: toolbarHeight }}>
           {searching ? (

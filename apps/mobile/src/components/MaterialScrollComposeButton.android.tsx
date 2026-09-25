@@ -29,7 +29,7 @@ export function MaterialScrollComposeButton(props: {
   const nativeIconSize = Math.round(iconSize / scale);
   const [buttonWidth, setButtonWidth] = useState(nativeSize);
   const rememberWidth = useCallback(({ width }: { width: number }) => {
-    setButtonWidth(width);
+    setButtonWidth((previous) => Math.max(previous, width));
   }, []);
   return (
     <View
