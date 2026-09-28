@@ -25,16 +25,6 @@ environment. Over SSH, the CLI prints a browser link and a short code. Open the
 link on any device, confirm the code matches, and approve. The CLI continues on
 its own, so you do not need to forward an OAuth callback port.
 
-To set up a locally paired host from your phone, open **Settings → Environments**,
-select the environment, expand **Connection**, and choose **Set up T3 Connect**.
-This requires a connection with permission to manage T3 Connect; otherwise,
-use Connections settings on the host. Setup enables activity publishing without
-changing your phone's notification preferences. New links include remote access;
-existing links keep their remote access setting. Running setup again restores an
-environment link disabled by an older mobile app. You can also repair an old link
-by turning T3 Connect off and on in the host's Connections settings. To disable
-publishing or unlink the host, use Connections settings on the host.
-
 T3 Connect renews access credentials when needed without disconnecting a healthy
 connection. Pull request diffs and provider settings keep working after the
 previous credential expires. A failed renewal affects that request; it does not

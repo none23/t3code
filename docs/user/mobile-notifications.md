@@ -2,9 +2,9 @@
 
 Sign in to T3 Connect, link your environments, and enable **Device Notifications** in **Settings → Notifications** to receive alerts when an agent finishes, fails, needs approval, or asks for input. Tap a notification to open its thread. Your environment must have agent activity publishing enabled.
 
-Enable **Ongoing Agent Activity** on Android or **Live Activity Updates** on iOS to follow work without opening the app. This setting applies only to this device. Finished results remain visible for up to 15 minutes. You can dismiss an Android activity card without disabling alerts; turn off ongoing activity in Settings to stop future cards.
+Use **Link environments to T3 Connect** in Notifications settings to set up locally paired environments with permission to manage T3 Connect.
 
-If an older app disabled updates on the environment link, [run T3 Connect setup again](./remote-access.md#t3-connect) to restore them. Changing the device toggle alone does not repair that link.
+Enable **Ongoing Agent Activity** on Android or **Live Activity Updates** on iOS to follow work without opening the app. This switch changes only this device. Finished results remain visible for up to 15 minutes. You can dismiss an Android activity card without disabling alerts; turn off ongoing activity in Settings to stop future cards.
 
 Ordinary alerts stay quiet while the mobile app is in the foreground. Ongoing activity continues to update. Viewing a thread on another device does not silence your phone's alerts.
 

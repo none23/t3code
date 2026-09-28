@@ -5,7 +5,7 @@ import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
 import * as Effect from "effect/Effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -29,9 +29,11 @@ import {
   refreshAgentAwarenessRegistration,
   subscribeAgentAwarenessRegistrationStatus,
 } from "../agent-awareness/remoteRegistration";
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { refreshManagedRelayEnvironments } from "../cloud/managedRelayState";
+import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/publicConfig";
 import { runtime } from "../../lib/runtime";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -84,7 +86,8 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       : agentAwarenessPlatform.subtitle;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
+  const { getToken, isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
+  const { savedConnectionsById } = useSavedRemoteConnections();
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("checking");
   const [liveActivityStatus, setLiveActivityStatus] = useState<LiveActivityStatus>("checking");
   const liveActivityWriteInFlight = useRef(false);
@@ -95,6 +98,9 @@ function ConfiguredSettingsNotificationsRouteScreen() {
   const canClearLiveActivitiesPreference =
     AsyncResult.isSuccess(preferencesResult) &&
     preferencesResult.value.liveActivitiesEnabled !== false;
+
+  const connections = useMemo(() => Object.values(savedConnectionsById), [savedConnectionsById]);
+  const environmentCount = connections.filter((connection) => connection.bearerToken).length;
 
   const refreshNotifications = useCallback(async () => {
     if (Platform.OS !== "ios" && Platform.OS !== "android") {
@@ -212,19 +218,19 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     );
   }, [navigation]);
 
-  const enableLiveActivities = useCallback(async () => {
+  async function updateLiveActivities(setup: boolean) {
     if (!isSignedIn) {
       promptSignIn();
       return;
     }
 
     setLiveActivityStatus("linking");
-    if (Platform.OS === "android") {
+    if (!setup && Platform.OS === "android") {
       const permission = await settleAsyncResult(() =>
         runtime.runPromiseExit(requestAgentNotificationPermission),
       );
       if (permission._tag === "Failure") {
-        setLiveActivityStatus("disabled");
+        setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
         const error = squashAtomCommandFailure(permission);
         Alert.alert(
           "Ongoing activity unavailable",
@@ -233,7 +239,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         return;
       }
       if (permission.value.type !== "granted") {
-        setLiveActivityStatus("disabled");
+        setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
         Alert.alert(
           "Notification permission needed",
           "Enable notifications in system Settings to show ongoing agent activity.",
@@ -246,16 +252,35 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       }
       setNotificationStatus("enabled");
     }
+    const tokenResult = await settlePromise(() => getToken(resolveRelayClerkTokenOptions()));
+    if (tokenResult._tag === "Failure") {
+      setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+      const error = squashAtomCommandFailure(tokenResult);
+      Alert.alert(
+        Platform.OS === "android" ? "Ongoing activity unavailable" : "Live Activities unavailable",
+        error instanceof Error ? error.message : "Could not enable agent activity updates.",
+      );
+      return;
+    }
+    if (!tokenResult.value) {
+      promptSignIn();
+      setLiveActivityStatus("signed-out");
+      return;
+    }
+
     const updateResult = await settleAsyncResult(() =>
       runtime.runPromiseExit(
         setLiveActivityUpdatesEnabled({
-          enabled: true,
+          enabled: setup ? liveActivitiesPreferenceEnabled : true,
           previousEnabled: liveActivitiesPreferenceEnabled,
+          clerkToken: tokenResult.value,
+          connections: setup ? connections : [],
         }),
       ),
     );
+    if (setup) refreshManagedRelayEnvironments();
     if (updateResult._tag === "Failure") {
-      setLiveActivityStatus("disabled");
+      setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
       if (!isAtomCommandInterrupted(updateResult)) {
         const error = squashAtomCommandFailure(updateResult);
         Alert.alert(
@@ -268,9 +293,14 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       return;
     }
 
+    if (setup) {
+      setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+      Alert.alert("Environments linked", "Your device's activity preference is unchanged.");
+      return;
+    }
     savePreferences({ liveActivitiesEnabled: true });
     setLiveActivityStatus("enabled");
-    // Registration can be skipped when a device cannot receive pushes yet.
+    // A saved preference does not guarantee that device registration succeeded.
     if (getAgentAwarenessRegistrationStatus() === "registered") {
       Alert.alert(
         Platform.OS === "android" ? "Ongoing activity enabled" : "Live Activities enabled",
@@ -282,7 +312,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         "This device could not be registered with T3 Connect, so activity updates won't appear yet. They'll start once registration succeeds.",
       );
     }
-  }, [isSignedIn, liveActivitiesPreferenceEnabled, promptSignIn, savePreferences]);
+  }
 
   const handleDeviceNotificationsChange = useCallback(
     (enabled: boolean) => {
@@ -320,6 +350,8 @@ function ConfiguredSettingsNotificationsRouteScreen() {
                 setLiveActivityUpdatesEnabled({
                   enabled: false,
                   previousEnabled: liveActivitiesPreferenceEnabled,
+                  clerkToken: null,
+                  connections: [],
                 }),
               ),
             );
@@ -345,13 +377,13 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       }
 
       liveActivityWriteInFlight.current = true;
-      void enableLiveActivities().finally(() => {
+      void updateLiveActivities(false).finally(() => {
         liveActivityWriteInFlight.current = false;
       });
     },
     [
       isSignedIn,
-      enableLiveActivities,
+      updateLiveActivities,
       liveActivitiesPreferenceEnabled,
       promptSignIn,
       savePreferences,
@@ -421,6 +453,23 @@ function ConfiguredSettingsNotificationsRouteScreen() {
               onPress={() => handleLiveActivitiesChange(false)}
             />
           ) : null}
+          <SettingsRow
+            icon="cloud"
+            label="Link environments to T3 Connect"
+            disabled={
+              !isLoaded ||
+              !AsyncResult.isSuccess(preferencesResult) ||
+              liveActivityStatus === "linking" ||
+              environmentCount === 0
+            }
+            onPress={() => {
+              if (liveActivityWriteInFlight.current) return;
+              liveActivityWriteInFlight.current = true;
+              void updateLiveActivities(true).finally(() => {
+                liveActivityWriteInFlight.current = false;
+              });
+            }}
+          />
           {supportsAndroidLiveUpdateSettings() ? (
             <SettingsRow
               icon="bolt.circle"

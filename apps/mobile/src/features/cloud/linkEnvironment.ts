@@ -147,7 +147,6 @@ function ensureLinkedEnvironmentMatches(input: {
 interface LinkEnvironmentToCloudInput {
   readonly connection: SavedRemoteConnection;
   readonly clerkToken: string;
-  readonly userId: string;
 }
 
 type LinkEnvironmentToCloudRequirements =
@@ -155,8 +154,8 @@ type LinkEnvironmentToCloudRequirements =
   | ManagedRelay.ManagedRelayClient
   | MobileStorage.MobileStorage;
 
-export function linkEnvironmentToCloud(
-  input: LinkEnvironmentToCloudInput,
+export function linkEnvironmentToCloudWithPreference(
+  input: LinkEnvironmentToCloudInput & { readonly liveActivitiesEnabled: boolean },
 ): Effect.Effect<void, CloudEnvironmentLinkError, LinkEnvironmentToCloudRequirements> {
   return Effect.gen(function* () {
     if (!input.connection.bearerToken) {
@@ -166,35 +165,19 @@ export function linkEnvironmentToCloud(
     }
     const localBearerToken = input.connection.bearerToken;
     const relayUrl = yield* requireRelayUrl();
-    const environmentClient = yield* makeEnvironmentHttpApiClient(input.connection.httpBaseUrl);
-    const current = yield* environmentClient.connect
-      .linkState({ headers: { authorization: `Bearer ${localBearerToken}` } })
-      .pipe(
-        Effect.mapError(cloudEnvironmentLinkError("Could not read environment cloud link state.")),
-      );
-    if (current.linked && current.cloudUserId !== input.userId) {
-      return yield* new CloudEnvironmentLinkError({
-        message:
-          "This environment is linked to another T3 Connect account. Unlink it on the host before switching accounts.",
-      });
-    }
-    // Repairing a publish-only link must not expose the host through a tunnel.
-    const managedTunnelsEnabled = !current.linked || current.managedTunnelActive !== false;
-    const providerKind = managedTunnelsEnabled ? MANAGED_ENDPOINT_PROVIDER_KIND : "manual";
     const relayClient = yield* ManagedRelay.ManagedRelayClient;
     const storage = yield* MobileStorage.MobileStorage;
     const deviceId = yield* storage.loadOrCreateAgentAwarenessDeviceId.pipe(
       Effect.mapError(cloudEnvironmentLinkError("Could not load the mobile device id.")),
     );
-    // Setup enables the source for the account. Each device controls its own preference.
-    const liveActivitiesEnabled = true;
+    const liveActivitiesEnabled = input.liveActivitiesEnabled;
     const challenge = yield* relayClient
       .createEnvironmentLinkChallenge({
         clerkToken: input.clerkToken,
         payload: {
           notificationsEnabled: true,
           liveActivitiesEnabled,
-          managedTunnelsEnabled,
+          managedTunnelsEnabled: true,
         },
       })
       .pipe(
@@ -202,6 +185,7 @@ export function linkEnvironmentToCloud(
           decodedRelayClientError(`${relayUrl}/v1/client/environment-link-challenges failed`),
         ),
       );
+    const environmentClient = yield* makeEnvironmentHttpApiClient(input.connection.httpBaseUrl);
     const proof = yield* environmentClient.connect
       .linkProof({
         headers: { authorization: `Bearer ${localBearerToken}` },
@@ -211,7 +195,7 @@ export function linkEnvironmentToCloud(
           endpoint: {
             httpBaseUrl: input.connection.httpBaseUrl,
             wsBaseUrl: input.connection.wsBaseUrl,
-            providerKind,
+            providerKind: MANAGED_ENDPOINT_PROVIDER_KIND,
           },
           origin: endpointOrigin(input.connection.httpBaseUrl),
         },
@@ -225,7 +209,7 @@ export function linkEnvironmentToCloud(
           proof,
           notificationsEnabled: true,
           liveActivitiesEnabled,
-          managedTunnelsEnabled,
+          managedTunnelsEnabled: true,
         },
       })
       .pipe(
@@ -233,7 +217,7 @@ export function linkEnvironmentToCloud(
       );
     yield* ensureLinkedEnvironmentMatches({
       expectedEnvironmentId: input.connection.environmentId,
-      expectedProviderKind: providerKind,
+      expectedProviderKind: MANAGED_ENDPOINT_PROVIDER_KIND,
       link,
     });
 
@@ -251,17 +235,6 @@ export function linkEnvironmentToCloud(
       })
       .pipe(
         Effect.mapError(cloudEnvironmentLinkError("Could not configure environment relay access.")),
-      );
-
-    yield* environmentClient.connect
-      .preferences({
-        headers: { authorization: `Bearer ${localBearerToken}` },
-        payload: { publishAgentActivity: true },
-      })
-      .pipe(
-        Effect.mapError(
-          cloudEnvironmentLinkError("Could not enable environment activity publishing."),
-        ),
       );
   });
 }
