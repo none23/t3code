@@ -31,6 +31,7 @@ import {
 } from "../../persistence/imperative";
 import type { Preferences } from "../../persistence/mobile-preferences";
 import { makeRelayDeviceRegistrationRequest, resolveApsEnvironment } from "./registrationPayload";
+import { setLiveActivityUpdatesEnabled } from "./liveActivityPreferences";
 import {
   AgentAwarenessOperationError,
   __resetAgentAwarenessRemoteRegistrationForTest,
@@ -45,7 +46,6 @@ import {
   setAgentAwarenessRelayTokenProvider,
   shouldRegisterAgentAwarenessDeviceForProvider,
   unregisterAgentAwarenessConnection,
-  updateAgentAwarenessRegistrationPreferences,
 } from "./remoteRegistration";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
@@ -1002,6 +1002,79 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       },
     );
   }
+  for (const os of ["ios", "android"] as const) {
+    it.effect(`toggles ${os} live activities without changing environment links or alerts`, () => {
+      vi.spyOn(Platform, "OS", "get").mockReturnValue(os);
+      vi.spyOn(Platform, "Version", "get").mockReturnValue(os === "ios" ? 18 : 36);
+      vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+        type: os,
+        data: "push-token",
+      });
+      vi.mocked(loadPreferences).mockResolvedValue({ liveActivitiesEnabled: true });
+      const registrations: unknown[] = [];
+      const requests: string[] = [];
+      vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        requests.push(request.url);
+        if (request.url === "https://relay.example.test/v1/client/dpop-token") {
+          return Response.json({
+            access_token: "dpop",
+            issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+            token_type: "DPoP",
+            expires_in: 300,
+            scope: "mobile:registration",
+          });
+        }
+        if (request.url === "https://relay.example.test/v1/mobile/devices") {
+          registrations.push(await request.json());
+          return Response.json({ ok: true });
+        }
+        return new Response("This paired client cannot administer the environment", {
+          status: 403,
+        });
+      });
+      Constants.expoConfig!.extra = { relay: { url: "https://relay.example.test" } };
+      setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk"), "user-a");
+      registerAgentAwarenessConnection(savedConnection());
+      return Effect.gen(function* () {
+        yield* runBackgroundOperations();
+        registrations.length = 0;
+        requests.length = 0;
+
+        yield* setLiveActivityUpdatesEnabled({ enabled: false, previousEnabled: true });
+        yield* setLiveActivityUpdatesEnabled({ enabled: true, previousEnabled: false });
+
+        expect(registrations).toEqual([
+          expect.objectContaining({
+            deviceId: "device-1",
+            platform: os,
+            preferences: expect.objectContaining({
+              notificationsEnabled: true,
+              liveActivitiesEnabled: false,
+            }),
+          }),
+          expect.objectContaining({
+            deviceId: "device-1",
+            platform: os,
+            preferences: expect.objectContaining({
+              notificationsEnabled: true,
+              liveActivitiesEnabled: true,
+            }),
+          }),
+        ]);
+        expect(
+          requests.every(
+            (url) =>
+              url === "https://relay.example.test/v1/client/dpop-token" ||
+              url === "https://relay.example.test/v1/mobile/devices",
+          ),
+        ).toBe(true);
+      }).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+        Effect.provide(relayTestLayer),
+      );
+    });
+  }
   it.effect("preserves relay rejection errors with React Native response headers", () => {
     vi.spyOn(Platform, "OS", "get").mockReturnValue("android");
     vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
@@ -1035,7 +1108,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       );
       expect(httpResponse.cookies).toEqual(Cookies.empty);
       const result = yield* Effect.exit(
-        updateAgentAwarenessRegistrationPreferences({ liveActivitiesEnabled: true }),
+        setLiveActivityUpdatesEnabled({ enabled: true, previousEnabled: false }),
       );
       expect(Exit.isFailure(result)).toBe(true);
       if (Exit.isFailure(result)) {
@@ -1045,6 +1118,11 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         );
       }
       expect(getAgentAwarenessRegistrationStatus()).toBe("failed");
+      expect(configureAndroidAgentNotifications).toHaveBeenLastCalledWith(
+        "device-1",
+        "user-a",
+        false,
+      );
       expect(saveAgentAwarenessRegistrationRecord).not.toHaveBeenCalled();
     }).pipe(Effect.provide(relayTestLayer));
   });

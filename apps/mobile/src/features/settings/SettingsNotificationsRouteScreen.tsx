@@ -5,7 +5,7 @@ import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
 import * as Effect from "effect/Effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -29,11 +29,9 @@ import {
   refreshAgentAwarenessRegistration,
   subscribeAgentAwarenessRegistrationStatus,
 } from "../agent-awareness/remoteRegistration";
-import { refreshManagedRelayEnvironments } from "../cloud/managedRelayState";
-import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/publicConfig";
+import { hasCloudPublicConfig } from "../cloud/publicConfig";
 import { runtime } from "../../lib/runtime";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
-import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -86,8 +84,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       : agentAwarenessPlatform.subtitle;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { getToken, isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
-  const { savedConnectionsById } = useSavedRemoteConnections();
+  const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("checking");
   const [liveActivityStatus, setLiveActivityStatus] = useState<LiveActivityStatus>("checking");
   const liveActivityWriteInFlight = useRef(false);
@@ -98,9 +95,6 @@ function ConfiguredSettingsNotificationsRouteScreen() {
   const canClearLiveActivitiesPreference =
     AsyncResult.isSuccess(preferencesResult) &&
     preferencesResult.value.liveActivitiesEnabled !== false;
-
-  const connections = useMemo(() => Object.values(savedConnectionsById), [savedConnectionsById]);
-  const environmentCount = connections.length;
 
   const refreshNotifications = useCallback(async () => {
     if (Platform.OS !== "ios" && Platform.OS !== "android") {
@@ -218,7 +212,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     );
   }, [navigation]);
 
-  const linkEnvironments = useCallback(async () => {
+  const enableLiveActivities = useCallback(async () => {
     if (!isSignedIn) {
       promptSignIn();
       return;
@@ -252,29 +246,11 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       }
       setNotificationStatus("enabled");
     }
-    const tokenResult = await settlePromise(() => getToken(resolveRelayClerkTokenOptions()));
-    if (tokenResult._tag === "Failure") {
-      setLiveActivityStatus("disabled");
-      const error = squashAtomCommandFailure(tokenResult);
-      Alert.alert(
-        Platform.OS === "android" ? "Ongoing activity unavailable" : "Live Activities unavailable",
-        error instanceof Error ? error.message : "Could not enable agent activity updates.",
-      );
-      return;
-    }
-    if (!tokenResult.value) {
-      promptSignIn();
-      setLiveActivityStatus("signed-out");
-      return;
-    }
-
     const updateResult = await settleAsyncResult(() =>
       runtime.runPromiseExit(
         setLiveActivityUpdatesEnabled({
           enabled: true,
           previousEnabled: liveActivitiesPreferenceEnabled,
-          clerkToken: tokenResult.value,
-          connections,
         }),
       ),
     );
@@ -293,17 +269,12 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     }
 
     savePreferences({ liveActivitiesEnabled: true });
-    refreshManagedRelayEnvironments();
     setLiveActivityStatus("enabled");
-    // The environment link can succeed while this device's own registration
-    // (the push-to-start token the relay needs) has not — don't claim Live
-    // Activities are live until the device is actually registered.
+    // Registration can be skipped when a device cannot receive pushes yet.
     if (getAgentAwarenessRegistrationStatus() === "registered") {
       Alert.alert(
         Platform.OS === "android" ? "Ongoing activity enabled" : "Live Activities enabled",
-        environmentCount > 0
-          ? `${environmentCount} environment${environmentCount === 1 ? "" : "s"} linked for agent activity updates.`
-          : "Agent activity updates are enabled. Add an environment to start receiving updates.",
+        "Agent activity updates are enabled for this device.",
       );
     } else {
       Alert.alert(
@@ -311,15 +282,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         "This device could not be registered with T3 Connect, so activity updates won't appear yet. They'll start once registration succeeds.",
       );
     }
-  }, [
-    connections,
-    environmentCount,
-    getToken,
-    isSignedIn,
-    liveActivitiesPreferenceEnabled,
-    promptSignIn,
-    savePreferences,
-  ]);
+  }, [isSignedIn, liveActivitiesPreferenceEnabled, promptSignIn, savePreferences]);
 
   const handleDeviceNotificationsChange = useCallback(
     (enabled: boolean) => {
@@ -352,28 +315,11 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         setLiveActivityStatus("linking");
         void (async () => {
           try {
-            let token: string | null = null;
-            if (isSignedIn) {
-              const tokenResult = await settlePromise(() =>
-                getToken(resolveRelayClerkTokenOptions()),
-              );
-              if (tokenResult._tag === "Failure") {
-                setLiveActivityStatus("enabled");
-                reportAtomCommandResult(tokenResult, {
-                  label: "live activity disable token lookup",
-                });
-                return;
-              }
-              token = tokenResult.value;
-            }
-
             const updateResult = await settleAsyncResult(() =>
               runtime.runPromiseExit(
                 setLiveActivityUpdatesEnabled({
                   enabled: false,
                   previousEnabled: liveActivitiesPreferenceEnabled,
-                  clerkToken: token,
-                  connections,
                 }),
               ),
             );
@@ -385,7 +331,6 @@ function ConfiguredSettingsNotificationsRouteScreen() {
               return;
             }
             savePreferences({ liveActivitiesEnabled: false });
-            refreshManagedRelayEnvironments();
             setLiveActivityStatus("disabled");
           } finally {
             liveActivityWriteInFlight.current = false;
@@ -400,15 +345,13 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       }
 
       liveActivityWriteInFlight.current = true;
-      void linkEnvironments().finally(() => {
+      void enableLiveActivities().finally(() => {
         liveActivityWriteInFlight.current = false;
       });
     },
     [
-      connections,
-      getToken,
       isSignedIn,
-      linkEnvironments,
+      enableLiveActivities,
       liveActivitiesPreferenceEnabled,
       promptSignIn,
       savePreferences,
