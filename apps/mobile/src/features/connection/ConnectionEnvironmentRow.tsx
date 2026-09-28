@@ -8,7 +8,7 @@ import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useCallback, useState } from "react";
 import { Platform, Alert, Pressable, View } from "react-native";
-import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import { AppText as Text } from "../../components/AppText";
 import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
@@ -20,6 +20,7 @@ import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-typ
 import { serverEnvironment } from "../../state/server";
 import { ConnectionFormField } from "./ConnectionFormField";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
+import { EnvironmentCloudSetup } from "../cloud/EnvironmentCloudSetup";
 
 function connectionStatusLabel(environment: ConnectedEnvironmentSummary): string | null {
   if (!environment.isEnabled && environment.connectionState !== "unsupported") {
@@ -77,7 +78,7 @@ export function ConnectionEnvironmentRow(props: {
   }, [label, url, props]);
 
   return (
-    <Animated.View layout={LinearTransition.duration(250)} className="bg-grouped-card">
+    <View collapsable={false} className="bg-grouped-card">
       <Pressable
         className="flex-row items-center gap-3 px-4 py-3.5 active:opacity-70"
         accessibilityRole="button"
@@ -181,6 +182,11 @@ export function ConnectionEnvironmentRow(props: {
             </>
           )}
 
+          <EnvironmentCloudSetup
+            environmentId={props.environment.environmentId}
+            connected={enabled && props.environment.connectionState === "connected"}
+          />
+
           {Platform.OS === "android" ? (
             <View className="flex-row items-center justify-end gap-2">
               {props.environment.isRelayManaged ? null : (
@@ -256,6 +262,6 @@ export function ConnectionEnvironmentRow(props: {
           )}
         </Animated.View>
       ) : null}
-    </Animated.View>
+    </View>
   );
 }
