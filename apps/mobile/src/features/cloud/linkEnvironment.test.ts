@@ -181,81 +181,6 @@ describe("mobile cloud link environment client", () => {
     }),
   );
 
-  for (const managedTunnelsEnabled of [false, true]) {
-    it.effect(
-      `repairs an existing link while keeping managed tunnels ${managedTunnelsEnabled ? "on" : "off"}`,
-      () =>
-        Effect.gen(function* () {
-          const providerKind = managedTunnelsEnabled ? "cloudflare_tunnel" : "manual";
-          const requests: Array<{ path: string; body: unknown }> = [];
-          vi.stubGlobal("fetch", (url: string | URL, init?: RequestInit) => {
-            const path = new URL(url).pathname;
-            if (init?.body) {
-              // @effect-diagnostics-next-line preferSchemaOverJson:off
-              requests.push({ path, body: JSON.parse(requestBodyText(init.body)) });
-            }
-            if (path === "/api/connect/link-state" || path === "/api/connect/preferences") {
-              return Promise.resolve(
-                Response.json({
-                  ...validLinkState(),
-                  linked: true,
-                  cloudUserId: "user_123",
-                  managedTunnelActive: managedTunnelsEnabled,
-                }),
-              );
-            }
-            if (path === "/v1/client/environment-link-challenges") {
-              return Promise.resolve(Response.json(validLinkChallengeResponse()));
-            }
-            if (path === "/api/connect/link-proof") {
-              return Promise.resolve(Response.json(validLinkProof()));
-            }
-            if (path === "/v1/client/environment-links") {
-              const link = validLinkResponse();
-              return Promise.resolve(
-                Response.json({
-                  ...link,
-                  endpoint: { ...link.endpoint, providerKind },
-                  endpointRuntime: managedTunnelsEnabled ? link.endpointRuntime : null,
-                }),
-              );
-            }
-            return Promise.resolve(Response.json({ ok: true, endpointRuntimeStatus: {} }));
-          });
-
-          yield* withCloudServices(
-            linkEnvironmentToCloud({
-              connection: savedConnection,
-              clerkToken: "clerk-token",
-              userId: "user_123",
-            }),
-          );
-
-          expect(requests).toEqual([
-            {
-              path: "/v1/client/environment-link-challenges",
-              body: expect.objectContaining({ liveActivitiesEnabled: true, managedTunnelsEnabled }),
-            },
-            {
-              path: "/api/connect/link-proof",
-              body: expect.objectContaining({
-                endpoint: expect.objectContaining({ providerKind }),
-              }),
-            },
-            {
-              path: "/v1/client/environment-links",
-              body: expect.objectContaining({ liveActivitiesEnabled: true, managedTunnelsEnabled }),
-            },
-            {
-              path: "/api/connect/relay-config",
-              body: expect.objectContaining({ cloudUserId: "user_123" }),
-            },
-            { path: "/api/connect/preferences", body: { publishAgentActivity: true } },
-          ]);
-        }),
-    );
-  }
-
   it.effect(
     "rejects relay link credentials for a different environment before persisting relay config",
     () =>
@@ -289,7 +214,7 @@ describe("mobile cloud link environment client", () => {
       }),
   );
 
-  it.effect("preserves typed local environment failures while obtaining a link proof", () =>
+  it.effect.each(["link-proof", "preferences"])("preserves host failures from %s", (endpoint) =>
     Effect.gen(function* () {
       const fetchMock = vi.fn((url: string | URL) => {
         if (String(url).endsWith("/api/connect/link-state")) {
@@ -297,6 +222,17 @@ describe("mobile cloud link environment client", () => {
         }
         if (String(url).endsWith("/v1/client/environment-link-challenges")) {
           return Promise.resolve(Response.json(validLinkChallengeResponse()));
+        }
+        if (endpoint === "preferences") {
+          if (String(url).endsWith("/api/connect/link-proof")) {
+            return Promise.resolve(Response.json(validLinkProof()));
+          }
+          if (String(url).endsWith("/v1/client/environment-links")) {
+            return Promise.resolve(Response.json(validLinkResponse()));
+          }
+          if (String(url).endsWith("/api/connect/relay-config")) {
+            return Promise.resolve(Response.json({ ok: true, endpointRuntimeStatus: {} }));
+          }
         }
         return Promise.resolve(
           Response.json(
@@ -319,9 +255,11 @@ describe("mobile cloud link environment client", () => {
       ).pipe(Effect.flip);
       expect(error._tag).toBe("CloudEnvironmentLinkError");
       expect(error.message).toBe(
-        "Could not obtain environment link proof: Invalid environment bearer session.",
+        endpoint === "link-proof"
+          ? "Could not obtain environment link proof: Invalid environment bearer session."
+          : "Could not enable environment activity publishing: Invalid environment bearer session.",
       );
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(endpoint === "link-proof" ? 3 : 6);
     }),
   );
 
@@ -429,13 +367,7 @@ describe("mobile cloud link environment client", () => {
         }
         if (String(url).endsWith("/api/connect/preferences")) {
           return Promise.resolve(
-            Response.json({
-              linked: true,
-              cloudUserId: "user_123",
-              relayUrl: "https://relay.example.test",
-              relayIssuer: "https://relay.example.test",
-              publishAgentActivity: true,
-            }),
+            Response.json({ ...validLinkState(), publishAgentActivity: true }),
           );
         }
         return Promise.resolve(
@@ -477,59 +409,24 @@ describe("mobile cloud link environment client", () => {
     }),
   );
 
-  it.effect("reports a host publishing failure after linking succeeds", () =>
+  it.effect.each([false, true])("repairs linked hosts with tunnels %s", (managed) =>
     Effect.gen(function* () {
-      vi.stubGlobal("fetch", (url: string | URL) => {
-        const path = new URL(url).pathname;
-        if (path === "/api/connect/link-state") {
-          return Promise.resolve(Response.json(validLinkState()));
-        }
-        if (path === "/v1/client/environment-link-challenges") {
-          return Promise.resolve(Response.json(validLinkChallengeResponse()));
-        }
-        if (path === "/api/connect/link-proof") {
-          return Promise.resolve(Response.json(validLinkProof()));
-        }
-        if (path === "/v1/client/environment-links") {
-          return Promise.resolve(Response.json(validLinkResponse()));
-        }
-        if (path === "/api/connect/preferences") {
-          return Promise.resolve(
-            Response.json(
-              {
-                _tag: "EnvironmentHttpForbiddenError",
-                message: "Permission denied.",
-              },
-              { status: 403 },
-            ),
-          );
-        }
-        return Promise.resolve(Response.json({ ok: true, endpointRuntimeStatus: {} }));
-      });
-
-      const error = yield* withCloudServices(
-        linkEnvironmentToCloud({
-          clerkToken: "clerk-token",
-          userId: "user_123",
-          connection: savedConnection,
-        }),
-      ).pipe(Effect.flip);
-      expect(error.message).toBe(
-        "Could not enable environment activity publishing: Permission denied.",
-      );
-    }),
-  );
-
-  it.effect("enables Live Activities for both the link challenge and registration", () =>
-    Effect.gen(function* () {
-      const bodies: Array<Record<string, unknown>> = [];
+      const providerKind = managed ? "cloudflare_tunnel" : "manual";
+      const bodies: Array<unknown> = [];
       const fetchMock = vi.fn((url: string | URL, init?: RequestInit) => {
         if (init?.body) {
           // @effect-diagnostics-next-line preferSchemaOverJson:off
-          bodies.push(JSON.parse(requestBodyText(init.body)) as Record<string, unknown>);
+          bodies.push(JSON.parse(requestBodyText(init.body)));
         }
         if (String(url).endsWith("/api/connect/link-state")) {
-          return Promise.resolve(Response.json(validLinkState()));
+          return Promise.resolve(
+            Response.json({
+              ...validLinkState(),
+              linked: true,
+              cloudUserId: "user_123",
+              managedTunnelActive: managed,
+            }),
+          );
         }
         if (String(url).endsWith("/v1/client/environment-link-challenges")) {
           return Promise.resolve(Response.json(validLinkChallengeResponse()));
@@ -538,17 +435,18 @@ describe("mobile cloud link environment client", () => {
           return Promise.resolve(Response.json(validLinkProof()));
         }
         if (String(url).endsWith("/v1/client/environment-links")) {
-          return Promise.resolve(Response.json(validLinkResponse()));
+          const link = validLinkResponse();
+          return Promise.resolve(
+            Response.json({
+              ...link,
+              endpoint: { ...link.endpoint, providerKind },
+              endpointRuntime: managed ? link.endpointRuntime : null,
+            }),
+          );
         }
         if (String(url).endsWith("/api/connect/preferences")) {
           return Promise.resolve(
-            Response.json({
-              linked: true,
-              cloudUserId: "user_123",
-              relayUrl: "https://relay.example.test",
-              relayIssuer: "https://relay.example.test",
-              publishAgentActivity: true,
-            }),
+            Response.json({ ...validLinkState(), publishAgentActivity: true }),
           );
         }
         return Promise.resolve(
@@ -565,9 +463,12 @@ describe("mobile cloud link environment client", () => {
         }),
       );
 
-      expect(bodies.filter((body) => "liveActivitiesEnabled" in body)).toEqual([
-        expect.objectContaining({ liveActivitiesEnabled: true }),
-        expect.objectContaining({ liveActivitiesEnabled: true }),
+      expect(bodies).toEqual([
+        expect.objectContaining({ liveActivitiesEnabled: true, managedTunnelsEnabled: managed }),
+        expect.objectContaining({ endpoint: expect.objectContaining({ providerKind }) }),
+        expect.objectContaining({ liveActivitiesEnabled: true, managedTunnelsEnabled: managed }),
+        expect.objectContaining({ cloudUserId: "user_123" }),
+        { publishAgentActivity: true },
       ]);
     }),
   );
