@@ -294,7 +294,9 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     }
 
     if (setup) {
-      setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+      setLiveActivityStatus((status) =>
+        status === "linking" ? (liveActivitiesPreferenceEnabled ? "enabled" : "disabled") : status,
+      );
       Alert.alert("Environments linked", "Your device's activity preference is unchanged.");
       return;
     }
