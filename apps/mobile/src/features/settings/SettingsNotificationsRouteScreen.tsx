@@ -5,7 +5,7 @@ import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
 import * as Effect from "effect/Effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -29,11 +29,9 @@ import {
   refreshAgentAwarenessRegistration,
   subscribeAgentAwarenessRegistrationStatus,
 } from "../agent-awareness/remoteRegistration";
-import { refreshManagedRelayEnvironments } from "../cloud/managedRelayState";
 import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/publicConfig";
 import { runtime } from "../../lib/runtime";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
-import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -87,7 +85,6 @@ function ConfiguredSettingsNotificationsRouteScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { getToken, isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
-  const { savedConnectionsById } = useSavedRemoteConnections();
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>("checking");
   const [liveActivityStatus, setLiveActivityStatus] = useState<LiveActivityStatus>("checking");
   const liveActivityWriteInFlight = useRef(false);
@@ -98,9 +95,6 @@ function ConfiguredSettingsNotificationsRouteScreen() {
   const canClearLiveActivitiesPreference =
     AsyncResult.isSuccess(preferencesResult) &&
     preferencesResult.value.liveActivitiesEnabled !== false;
-
-  const connections = useMemo(() => Object.values(savedConnectionsById), [savedConnectionsById]);
-  const environmentCount = connections.filter((connection) => connection.bearerToken).length;
 
   const refreshNotifications = useCallback(async () => {
     if (Platform.OS !== "ios" && Platform.OS !== "android") {
@@ -218,19 +212,19 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     );
   }, [navigation]);
 
-  async function updateLiveActivities(setup: boolean) {
+  const enableLiveActivities = useCallback(async () => {
     if (!isSignedIn) {
       promptSignIn();
       return;
     }
 
     setLiveActivityStatus("linking");
-    if (!setup && Platform.OS === "android") {
+    if (Platform.OS === "android") {
       const permission = await settleAsyncResult(() =>
         runtime.runPromiseExit(requestAgentNotificationPermission),
       );
       if (permission._tag === "Failure") {
-        setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+        setLiveActivityStatus("disabled");
         const error = squashAtomCommandFailure(permission);
         Alert.alert(
           "Ongoing activity unavailable",
@@ -239,7 +233,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         return;
       }
       if (permission.value.type !== "granted") {
-        setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+        setLiveActivityStatus("disabled");
         Alert.alert(
           "Notification permission needed",
           "Enable notifications in system Settings to show ongoing agent activity.",
@@ -254,7 +248,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     }
     const tokenResult = await settlePromise(() => getToken(resolveRelayClerkTokenOptions()));
     if (tokenResult._tag === "Failure") {
-      setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+      setLiveActivityStatus("disabled");
       const error = squashAtomCommandFailure(tokenResult);
       Alert.alert(
         Platform.OS === "android" ? "Ongoing activity unavailable" : "Live Activities unavailable",
@@ -271,16 +265,15 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     const updateResult = await settleAsyncResult(() =>
       runtime.runPromiseExit(
         setLiveActivityUpdatesEnabled({
-          enabled: setup ? liveActivitiesPreferenceEnabled : true,
+          enabled: true,
           previousEnabled: liveActivitiesPreferenceEnabled,
           clerkToken: tokenResult.value,
-          connections: setup ? connections : [],
+          connections: [],
         }),
       ),
     );
-    if (setup) refreshManagedRelayEnvironments();
     if (updateResult._tag === "Failure") {
-      setLiveActivityStatus(liveActivitiesPreferenceEnabled ? "enabled" : "disabled");
+      setLiveActivityStatus("disabled");
       if (!isAtomCommandInterrupted(updateResult)) {
         const error = squashAtomCommandFailure(updateResult);
         Alert.alert(
@@ -293,13 +286,6 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       return;
     }
 
-    if (setup) {
-      setLiveActivityStatus((status) =>
-        status === "linking" ? (liveActivitiesPreferenceEnabled ? "enabled" : "disabled") : status,
-      );
-      Alert.alert("Environments linked", "Your device's activity preference is unchanged.");
-      return;
-    }
     savePreferences({ liveActivitiesEnabled: true });
     setLiveActivityStatus("enabled");
     // A saved preference does not guarantee that device registration succeeded.
@@ -314,7 +300,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         "This device could not be registered with T3 Connect, so activity updates won't appear yet. They'll start once registration succeeds.",
       );
     }
-  }
+  }, [getToken, isSignedIn, liveActivitiesPreferenceEnabled, promptSignIn, savePreferences]);
 
   const handleDeviceNotificationsChange = useCallback(
     (enabled: boolean) => {
@@ -347,12 +333,27 @@ function ConfiguredSettingsNotificationsRouteScreen() {
         setLiveActivityStatus("linking");
         void (async () => {
           try {
+            let token: string | null = null;
+            if (isSignedIn) {
+              const tokenResult = await settlePromise(() =>
+                getToken(resolveRelayClerkTokenOptions()),
+              );
+              if (tokenResult._tag === "Failure") {
+                setLiveActivityStatus("enabled");
+                reportAtomCommandResult(tokenResult, {
+                  label: "live activity disable token lookup",
+                });
+                return;
+              }
+              token = tokenResult.value;
+            }
+
             const updateResult = await settleAsyncResult(() =>
               runtime.runPromiseExit(
                 setLiveActivityUpdatesEnabled({
                   enabled: false,
                   previousEnabled: liveActivitiesPreferenceEnabled,
-                  clerkToken: null,
+                  clerkToken: token,
                   connections: [],
                 }),
               ),
@@ -379,13 +380,14 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       }
 
       liveActivityWriteInFlight.current = true;
-      void updateLiveActivities(false).finally(() => {
+      void enableLiveActivities().finally(() => {
         liveActivityWriteInFlight.current = false;
       });
     },
     [
+      getToken,
       isSignedIn,
-      updateLiveActivities,
+      enableLiveActivities,
       liveActivitiesPreferenceEnabled,
       promptSignIn,
       savePreferences,
@@ -455,23 +457,6 @@ function ConfiguredSettingsNotificationsRouteScreen() {
               onPress={() => handleLiveActivitiesChange(false)}
             />
           ) : null}
-          <SettingsRow
-            icon="cloud"
-            label="Link environments to T3 Connect"
-            disabled={
-              !isLoaded ||
-              !AsyncResult.isSuccess(preferencesResult) ||
-              liveActivityStatus === "linking" ||
-              environmentCount === 0
-            }
-            onPress={() => {
-              if (liveActivityWriteInFlight.current) return;
-              liveActivityWriteInFlight.current = true;
-              void updateLiveActivities(true).finally(() => {
-                liveActivityWriteInFlight.current = false;
-              });
-            }}
-          />
           {supportsAndroidLiveUpdateSettings() ? (
             <SettingsRow
               icon="bolt.circle"

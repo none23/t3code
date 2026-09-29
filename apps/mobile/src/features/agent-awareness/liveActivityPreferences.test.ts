@@ -75,7 +75,7 @@ describe("liveActivityPreferences", () => {
     vi.clearAllMocks();
   });
 
-  it.effect("links environments without enabling activity on this device", () =>
+  it.effect("pushes disabled Live Activity preferences to relay registrations", () =>
     Effect.gen(function* () {
       yield* setLiveActivityUpdatesEnabled({
         enabled: false,
@@ -90,7 +90,7 @@ describe("liveActivityPreferences", () => {
       expect(linkEnvironmentToCloudWithPreference).toHaveBeenCalledWith({
         clerkToken: "clerk-token",
         connection,
-        liveActivitiesEnabled: true,
+        liveActivitiesEnabled: false,
       });
     }).pipe(Effect.provide(testLayer)),
   );
@@ -126,6 +126,28 @@ describe("liveActivityPreferences", () => {
       expect(updateAgentAwarenessRegistrationPreferences).toHaveBeenCalledWith({
         liveActivitiesEnabled: enabled,
       });
+      expect(linkEnvironmentToCloudWithPreference).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect.each([false, true])("restores the device preference when setting %s fails", (enabled) =>
+    Effect.gen(function* () {
+      vi.mocked(updateAgentAwarenessRegistrationPreferences).mockReturnValueOnce(
+        Effect.fail(new Error("device registration failed")),
+      );
+      const exit = yield* Effect.exit(
+        setLiveActivityUpdatesEnabled({
+          enabled,
+          previousEnabled: !enabled,
+          clerkToken: "clerk-token",
+          connections: [],
+        }),
+      );
+      expect(exit._tag).toBe("Failure");
+      expect(vi.mocked(updateAgentAwarenessRegistrationPreferences).mock.calls).toEqual([
+        [{ liveActivitiesEnabled: enabled }],
+        [{ liveActivitiesEnabled: !enabled }],
+      ]);
       expect(linkEnvironmentToCloudWithPreference).not.toHaveBeenCalled();
     }).pipe(Effect.provide(testLayer)),
   );
@@ -194,9 +216,13 @@ describe("liveActivityPreferences", () => {
       expect(linkEnvironmentToCloudWithPreference).toHaveBeenNthCalledWith(1, {
         clerkToken: "clerk-token",
         connection,
+        liveActivitiesEnabled: false,
+      });
+      expect(linkEnvironmentToCloudWithPreference).toHaveBeenNthCalledWith(2, {
+        clerkToken: "clerk-token",
+        connection,
         liveActivitiesEnabled: true,
       });
-      expect(linkEnvironmentToCloudWithPreference).toHaveBeenCalledTimes(1);
     }).pipe(Effect.provide(testLayer));
   });
 });

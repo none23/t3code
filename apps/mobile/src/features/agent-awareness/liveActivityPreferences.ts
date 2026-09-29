@@ -11,7 +11,6 @@ export const setLiveActivityUpdatesEnabled = Effect.fn("setLiveActivityUpdatesEn
     readonly clerkToken: string | null;
     readonly connections: ReadonlyArray<SavedRemoteConnection>;
   }) {
-    // Only explicit setup supplies connections. The toggle changes this device alone.
     const linkedConnections = input.connections.filter(
       (connection) => connection.bearerToken !== null,
     );
@@ -30,7 +29,7 @@ export const setLiveActivityUpdatesEnabled = Effect.fn("setLiveActivityUpdatesEn
           linkEnvironmentToCloudWithPreference({
             clerkToken,
             connection,
-            liveActivitiesEnabled: true,
+            liveActivitiesEnabled: enabled,
           }),
         { concurrency: "unbounded" },
       );
@@ -43,6 +42,27 @@ export const setLiveActivityUpdatesEnabled = Effect.fn("setLiveActivityUpdatesEn
         Effect.catchCause((cause) =>
           Effect.logWarning("Could not restore Live Activity device preference.", cause),
         ),
+      );
+
+      const clerkToken = input.clerkToken;
+      if (!clerkToken) return;
+
+      yield* Effect.forEach(
+        linkedConnections,
+        (connection) =>
+          linkEnvironmentToCloudWithPreference({
+            clerkToken,
+            connection,
+            liveActivitiesEnabled: input.previousEnabled,
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `Could not restore Live Activity preference for environment ${connection.environmentId}.`,
+                cause,
+              ),
+            ),
+          ),
+        { concurrency: "unbounded" },
       );
     });
 
