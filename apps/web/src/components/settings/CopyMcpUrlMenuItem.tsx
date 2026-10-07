@@ -1,3 +1,5 @@
+import { CopyIcon } from "lucide-react";
+
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { MenuItem } from "../ui/menu";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -24,6 +26,9 @@ export function CopyMcpUrlMenuItem({ url }: { readonly url: string | null }) {
   });
 
   return url ? (
-    <MenuItem onClick={() => copyToClipboard(url, { url })}>Copy MCP URL</MenuItem>
+    <MenuItem onClick={() => copyToClipboard(url, { url })}>
+      <CopyIcon />
+      Copy MCP URL
+    </MenuItem>
   ) : null;
 }
