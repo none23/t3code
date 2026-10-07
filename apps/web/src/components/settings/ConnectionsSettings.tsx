@@ -87,6 +87,7 @@ import {
 import { LocalEnvironmentSetting } from "./LocalEnvironmentSetting";
 import { searchableSetting } from "./settingsSearch";
 import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
+import { CopyMcpUrlMenuItem } from "./CopyMcpUrlMenuItem";
 import { EnvironmentRoutesList } from "./EnvironmentRoutesList";
 import { usePreparedConnection } from "~/state/session";
 import {
@@ -1617,25 +1618,6 @@ function SavedBackendListRow({
     },
     [copyTraceIdToClipboard],
   );
-  const { copyToClipboard: copyMcpUrl } = useCopyToClipboard<{ url: string }>({
-    target: "MCP URL",
-    onCopy: ({ url }) => {
-      toastManager.add({
-        type: "success",
-        title: "MCP URL copied",
-        description: `Add it to an agent, e.g. claude mcp add --transport http t3 ${url}`,
-      });
-    },
-    onError: (error) => {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Could not copy MCP URL",
-          description: error.message,
-        }),
-      );
-    },
-  });
   const versionMismatch = resolveServerConfigVersionMismatch(environment.serverConfig);
   const serverUpdateState = useAtomValue(serverEnvironment.updateStateAtom(environmentId));
   const resumingServerUpdate =
@@ -1834,9 +1816,7 @@ function SavedBackendListRow({
             <RouteIcon />
             {routesOpen ? "Hide routes" : "Routes"}
           </MenuItem>
-          {mcpUrl ? (
-            <MenuItem onClick={() => copyMcpUrl(mcpUrl, { url: mcpUrl })}>Copy MCP URL</MenuItem>
-          ) : null}
+          <CopyMcpUrlMenuItem url={mcpUrl} />
           {errorTraceId ? (
             <MenuItem onClick={() => copyTraceId(errorTraceId)}>Copy trace ID</MenuItem>
           ) : null}
@@ -3703,6 +3683,13 @@ export function ConnectionsSettings() {
                     <EnvironmentIconMenu
                       environmentId={primaryEnvironmentId}
                       serverConfig={primaryServerConfig}
+                    />
+                    <CopyMcpUrlMenuItem
+                      url={
+                        primaryEnvironment
+                          ? environmentMcpUrl({ entry: primaryEnvironment.entry })
+                          : null
+                      }
                     />
                   </MenuPopup>
                 </Menu>

@@ -8,9 +8,9 @@ in once, and you choose what it may do.
 
 ## Get the MCP URL
 
-In **Settings → Connections**, open a saved environment's menu and choose
-**Copy MCP URL**. The URL is the environment's address followed by `/mcp`, for
-example:
+In **Settings → Connections**, open the local machine's or a saved environment's
+menu and choose **Copy MCP URL**. The URL is the environment's address followed
+by `/mcp`, for example:
 
 ```text
 https://<environment-address>/mcp
