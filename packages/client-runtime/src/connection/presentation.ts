@@ -1,4 +1,5 @@
 import type { ServerConfig } from "@t3tools/contracts";
+import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import * as Option from "effect/Option";
 
 import type { ConnectionCatalogEntry } from "./catalog.ts";
@@ -105,10 +106,11 @@ export function environmentMcpUrl(input: {
   readonly relayHttpBaseUrl?: string | undefined;
   readonly connectedTarget?: ConnectionTarget | null | undefined;
 }): string | null {
-  const relayMcpUrl = input.relayHttpBaseUrl ? mcpUrlFromBase(input.relayHttpBaseUrl) : null;
-  // A publish-only cloud link can advertise localhost without a public tunnel.
-  // Only a public HTTPS endpoint takes priority over the connected route.
-  if (relayMcpUrl?.startsWith("https://")) return relayMcpUrl;
+  let relayMcpUrl = input.relayHttpBaseUrl ? mcpUrlFromBase(input.relayHttpBaseUrl) : null;
+  // Publish-only links can advertise the host's localhost. An outside agent
+  // would resolve that address to its own machine.
+  if (relayMcpUrl && isLocalLoopbackHost(relayMcpUrl.hostname)) relayMcpUrl = null;
+  if (relayMcpUrl?.protocol === "https:") return relayMcpUrl.toString();
 
   const routes = connectionRoutes(input.entry);
   const connectedRouteId = input.connectedTarget ? connectionRouteId(input.connectedTarget) : null;
@@ -117,17 +119,17 @@ export function environmentMcpUrl(input: {
   );
   for (const route of connectedRoute ? [connectedRoute, ...routes] : routes) {
     if (route.target._tag === "RelayConnectionTarget") {
-      if (relayMcpUrl !== null) return relayMcpUrl;
+      if (relayMcpUrl !== null) return relayMcpUrl.toString();
       continue;
     }
     const httpBaseUrl = routeHttpBaseUrl(route);
     const mcpUrl = httpBaseUrl === null ? null : mcpUrlFromBase(httpBaseUrl);
-    if (mcpUrl !== null) return mcpUrl;
+    if (mcpUrl !== null) return mcpUrl.toString();
   }
   return null;
 }
 
-function mcpUrlFromBase(httpBaseUrl: string): string | null {
+function mcpUrlFromBase(httpBaseUrl: string): URL | null {
   let url: URL;
   try {
     url = new URL(httpBaseUrl);
@@ -137,7 +139,7 @@ function mcpUrlFromBase(httpBaseUrl: string): string | null {
   url.pathname = "/mcp";
   url.search = "";
   url.hash = "";
-  return url.toString();
+  return url;
 }
 
 export function connectionCatalogDisplayUrl(entry: ConnectionCatalogEntry): string | null {

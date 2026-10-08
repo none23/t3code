@@ -142,6 +142,23 @@ describe("connection presentation", () => {
         relayHttpBaseUrl: "https://tunnel.example.test",
       }),
     ).toBe("https://tunnel.example.test/mcp");
+
+    for (const relayHttpBaseUrl of [
+      "http://localhost:3773",
+      "https://localhost:3773",
+      "http://127.0.0.2:3773",
+      "http://[::1]:3773",
+    ]) {
+      expect(environmentMcpUrl({ entry, relayHttpBaseUrl })).toBe(
+        "https://environment.example.test/mcp",
+      );
+      expect(
+        environmentMcpUrl({ entry: { ...entry, alternateRoutes: [] }, relayHttpBaseUrl }),
+      ).toBeNull();
+    }
+    for (const relayHttpBaseUrl of ["http://192.168.1.10:3773", "http://100.81.102.68:3773"]) {
+      expect(environmentMcpUrl({ entry, relayHttpBaseUrl })).toBe(`${relayHttpBaseUrl}/mcp`);
+    }
   });
 
   it.each([
