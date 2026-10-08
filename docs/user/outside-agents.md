@@ -16,8 +16,9 @@ by `/mcp`, for example:
 https://<environment-address>/mcp
 ```
 
-The copied URL uses the route this device is connected over, so an agent on the
-same device can reach it.
+The copy action prefers the T3 Connect HTTPS address when available. Otherwise
+it uses the route this device is connected over, or the first saved route with
+an address when disconnected.
 
 - **An agent on your own computers** can use any address that computer reaches
   the environment at: a LAN or Tailscale address, T3 Connect, or `localhost` on

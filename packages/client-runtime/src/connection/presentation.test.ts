@@ -11,7 +11,9 @@ import {
   BearerConnectionTarget,
   ConnectionBlockedError,
   ConnectionTransientError,
+  PrimaryConnectionTarget,
   RelayConnectionTarget,
+  SshConnectionTarget,
   type SupervisorConnectionState,
 } from "./model.ts";
 import {
@@ -77,7 +79,7 @@ describe("connection presentation", () => {
     expect(connectionCatalogDisplayUrl(ENTRY)).toBe("https://environment.example.test");
   });
 
-  it("copies the MCP address of the route this device is connected over", () => {
+  it("uses the connected route when T3 Connect has no public endpoint", () => {
     const route = (connectionId: string, httpBaseUrl: string): ConnectionRoute => {
       const target = new BearerConnectionTarget({ ...TARGET, connectionId });
       return {
@@ -108,6 +110,13 @@ describe("connection presentation", () => {
     );
     // Not connected: the preferred route, plain http or not.
     expect(environmentMcpUrl({ entry })).toBe("http://192.168.4.53:3773/mcp");
+    expect(
+      environmentMcpUrl({
+        entry,
+        connectedTarget: tailnet.target,
+        relayHttpBaseUrl: "https://connect.example.test",
+      }),
+    ).toBe("https://connect.example.test/mcp");
   });
 
   it("passes over routes without an address of their own", () => {
@@ -133,6 +142,89 @@ describe("connection presentation", () => {
         relayHttpBaseUrl: "https://tunnel.example.test",
       }),
     ).toBe("https://tunnel.example.test/mcp");
+  });
+
+  it.each([
+    new PrimaryConnectionTarget({
+      environmentId: TARGET.environmentId,
+      label: TARGET.label,
+      httpBaseUrl: "http://localhost:3773",
+      wsBaseUrl: "ws://localhost:3773",
+    }),
+    TARGET,
+    new RelayConnectionTarget({ environmentId: TARGET.environmentId, label: TARGET.label }),
+    new SshConnectionTarget({
+      environmentId: TARGET.environmentId,
+      label: TARGET.label,
+      connectionId: "ssh-1",
+    }),
+  ])("prefers T3 Connect for $_tag", (target) => {
+    expect(
+      environmentMcpUrl({
+        entry: { ...ENTRY, target },
+        relayHttpBaseUrl: "https://connect.example.test/some/path?query=value#fragment",
+      }),
+    ).toBe("https://connect.example.test/mcp");
+  });
+
+  it.each([
+    ["https://environment.example.test", "https://environment.example.test/mcp"],
+    ["http://localhost:3773", "http://localhost:3773/mcp"],
+    ["http://127.0.0.1:3773", "http://127.0.0.1:3773/mcp"],
+    ["http://[::1]:3773", "http://[::1]:3773/mcp"],
+    ["http://192.168.1.10:3773", "http://192.168.1.10:3773/mcp"],
+    ["http://100.81.102.68:3773", "http://100.81.102.68:3773/mcp"],
+    ["not a URL", null],
+  ])(
+    "applies the same direct URL rules to local and saved environments: %s",
+    (httpBaseUrl, expected) => {
+      const primaryEntry: ConnectionCatalogEntry = {
+        ...ENTRY,
+        target: new PrimaryConnectionTarget({
+          environmentId: TARGET.environmentId,
+          label: TARGET.label,
+          httpBaseUrl,
+          wsBaseUrl: httpBaseUrl.replace(/^http/, "ws"),
+        }),
+        profile: Option.none(),
+      };
+      const savedEntry: ConnectionCatalogEntry = {
+        ...ENTRY,
+        profile: Option.some(
+          new BearerConnectionProfile({
+            connectionId: TARGET.connectionId,
+            environmentId: TARGET.environmentId,
+            label: TARGET.label,
+            httpBaseUrl,
+            wsBaseUrl: httpBaseUrl.replace(/^http/, "ws"),
+          }),
+        ),
+      };
+      expect(environmentMcpUrl({ entry: primaryEntry })).toBe(expected);
+      expect(environmentMcpUrl({ entry: savedEntry })).toBe(expected);
+    },
+  );
+
+  it.each(["not a URL", "http://192.168.1.10:3773", "http://localhost:3773"])(
+    "keeps direct HTTPS when the discovered relay address is not HTTPS: %s",
+    (relayHttpBaseUrl) => {
+      expect(environmentMcpUrl({ entry: ENTRY, relayHttpBaseUrl })).toBe(
+        "https://environment.example.test/mcp",
+      );
+    },
+  );
+
+  it("has no MCP address for a relay or SSH connection without a discovered endpoint", () => {
+    for (const target of [
+      new RelayConnectionTarget({ environmentId: TARGET.environmentId, label: TARGET.label }),
+      new SshConnectionTarget({
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+        connectionId: "ssh-1",
+      }),
+    ]) {
+      expect(environmentMcpUrl({ entry: { ...ENTRY, target, profile: Option.none() } })).toBeNull();
+    }
   });
 
   it("distinguishes initial connection, reconnect, and retry errors", () => {
