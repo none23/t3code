@@ -8,17 +8,16 @@ in once, and you choose what it may do.
 
 ## Get the MCP URL
 
-In **Settings → Connections**, open the local machine's or a saved environment's
-menu and choose **Copy MCP URL**. The URL is the environment's address followed
-by `/mcp`, for example:
+In **Settings → Connections**, open any environment's menu and choose
+**Copy MCP URL**. The URL is the environment's address followed by `/mcp`, for
+example:
 
 ```text
 https://<environment-address>/mcp
 ```
 
-The copy action prefers the T3 Connect HTTPS address when available. Otherwise
-it uses the route this device is connected over, or the first saved route with
-an address when disconnected.
+The copied URL prefers the T3 Connect HTTPS address when available, then the
+connected route or first saved route with an address.
 
 - **An agent on your own computers** can use any address that computer reaches
   the environment at: a LAN or Tailscale address, T3 Connect, or `localhost` on

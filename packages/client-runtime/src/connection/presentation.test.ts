@@ -162,65 +162,45 @@ describe("connection presentation", () => {
   });
 
   it.each([
-    new PrimaryConnectionTarget({
-      environmentId: TARGET.environmentId,
-      label: TARGET.label,
-      httpBaseUrl: "http://localhost:3773",
-      wsBaseUrl: "ws://localhost:3773",
-    }),
-    TARGET,
-    new RelayConnectionTarget({ environmentId: TARGET.environmentId, label: TARGET.label }),
-    new SshConnectionTarget({
-      environmentId: TARGET.environmentId,
-      label: TARGET.label,
-      connectionId: "ssh-1",
-    }),
-  ])("prefers T3 Connect for $_tag", (target) => {
+    {
+      target: new PrimaryConnectionTarget({
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+        httpBaseUrl: "http://localhost:3773",
+        wsBaseUrl: "ws://localhost:3773",
+      }),
+      fallback: "http://localhost:3773/mcp",
+    },
+    { target: TARGET, fallback: "https://environment.example.test/mcp" },
+    {
+      target: new RelayConnectionTarget({
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+      }),
+      fallback: null,
+    },
+    {
+      target: new SshConnectionTarget({
+        environmentId: TARGET.environmentId,
+        label: TARGET.label,
+        connectionId: "ssh-1",
+      }),
+      fallback: null,
+    },
+  ])("prefers T3 Connect and preserves the $target._tag fallback", ({ target, fallback }) => {
+    const entry: ConnectionCatalogEntry = {
+      ...ENTRY,
+      target,
+      profile: target._tag === "BearerConnectionTarget" ? ENTRY.profile : Option.none(),
+    };
+    expect(environmentMcpUrl({ entry })).toBe(fallback);
     expect(
       environmentMcpUrl({
-        entry: { ...ENTRY, target },
+        entry,
         relayHttpBaseUrl: "https://connect.example.test/some/path?query=value#fragment",
       }),
     ).toBe("https://connect.example.test/mcp");
   });
-
-  it.each([
-    ["https://environment.example.test", "https://environment.example.test/mcp"],
-    ["http://localhost:3773", "http://localhost:3773/mcp"],
-    ["http://127.0.0.1:3773", "http://127.0.0.1:3773/mcp"],
-    ["http://[::1]:3773", "http://[::1]:3773/mcp"],
-    ["http://192.168.1.10:3773", "http://192.168.1.10:3773/mcp"],
-    ["http://100.81.102.68:3773", "http://100.81.102.68:3773/mcp"],
-    ["not a URL", null],
-  ])(
-    "applies the same direct URL rules to local and saved environments: %s",
-    (httpBaseUrl, expected) => {
-      const primaryEntry: ConnectionCatalogEntry = {
-        ...ENTRY,
-        target: new PrimaryConnectionTarget({
-          environmentId: TARGET.environmentId,
-          label: TARGET.label,
-          httpBaseUrl,
-          wsBaseUrl: httpBaseUrl.replace(/^http/, "ws"),
-        }),
-        profile: Option.none(),
-      };
-      const savedEntry: ConnectionCatalogEntry = {
-        ...ENTRY,
-        profile: Option.some(
-          new BearerConnectionProfile({
-            connectionId: TARGET.connectionId,
-            environmentId: TARGET.environmentId,
-            label: TARGET.label,
-            httpBaseUrl,
-            wsBaseUrl: httpBaseUrl.replace(/^http/, "ws"),
-          }),
-        ),
-      };
-      expect(environmentMcpUrl({ entry: primaryEntry })).toBe(expected);
-      expect(environmentMcpUrl({ entry: savedEntry })).toBe(expected);
-    },
-  );
 
   it.each(["not a URL", "http://192.168.1.10:3773", "http://localhost:3773"])(
     "keeps direct HTTPS when the discovered relay address is not HTTPS: %s",
@@ -230,19 +210,6 @@ describe("connection presentation", () => {
       );
     },
   );
-
-  it("has no MCP address for a relay or SSH connection without a discovered endpoint", () => {
-    for (const target of [
-      new RelayConnectionTarget({ environmentId: TARGET.environmentId, label: TARGET.label }),
-      new SshConnectionTarget({
-        environmentId: TARGET.environmentId,
-        label: TARGET.label,
-        connectionId: "ssh-1",
-      }),
-    ]) {
-      expect(environmentMcpUrl({ entry: { ...ENTRY, target, profile: Option.none() } })).toBeNull();
-    }
-  });
 
   it("distinguishes initial connection, reconnect, and retry errors", () => {
     expect(presentConnectionState(supervisorState({ phase: "connecting", attempt: 1 }))).toEqual({

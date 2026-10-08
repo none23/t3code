@@ -1,5 +1,6 @@
 import {
   ChevronRightIcon,
+  CopyIcon,
   ChevronsLeftRightEllipsisIcon,
   EllipsisIcon,
   PlusIcon,
@@ -56,6 +57,7 @@ import {
   RelayConnectionTarget,
   connectionRoutes,
   connectionStatusText,
+  environmentMcpUrl,
 } from "@t3tools/client-runtime/connection";
 import {
   isAtomCommandInterrupted,
@@ -65,7 +67,6 @@ import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { useEnvironmentMcpUrl } from "../../hooks/useEnvironmentMcpUrl";
 import { cn } from "../../lib/utils";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
@@ -87,7 +88,6 @@ import {
 import { LocalEnvironmentSetting } from "./LocalEnvironmentSetting";
 import { searchableSetting } from "./settingsSearch";
 import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
-import { CopyMcpUrlMenuItem } from "./CopyMcpUrlMenuItem";
 import { EnvironmentRoutesList } from "./EnvironmentRoutesList";
 import { usePreparedConnection } from "~/state/session";
 import {
@@ -1529,6 +1529,32 @@ function NetworkAccessDescription({
   );
 }
 
+function CopyMcpUrlMenuItem({ url }: { url: string | null }) {
+  const { copyToClipboard } = useCopyToClipboard<string>({
+    target: "MCP URL",
+    onCopy: (url) =>
+      toastManager.add({
+        type: "success",
+        title: "MCP URL copied",
+        description: `Add it to an agent, e.g. claude mcp add --transport http t3 ${url}`,
+      }),
+    onError: (error) =>
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not copy MCP URL",
+          description: error.message,
+        }),
+      ),
+  });
+  return url ? (
+    <MenuItem onClick={() => copyToClipboard(url, url)}>
+      <CopyIcon />
+      Copy MCP URL
+    </MenuItem>
+  ) : null;
+}
+
 type SavedBackendListRowProps = {
   environment: EnvironmentPresentation;
   removingEnvironmentId: EnvironmentId | null;
@@ -1637,9 +1663,23 @@ function SavedBackendListRow({
   if (discoveredDescriptor !== undefined && discoveredDescriptor !== lastDescriptor) {
     setLastDescriptor(discoveredDescriptor);
   }
+  // Held for the same reason as the descriptor, so Copy MCP URL survives a refresh.
+  const discoveredRelayHttpBaseUrl =
+    relayDiscovery.environments.get(environmentId)?.environment.endpoint.httpBaseUrl;
+  const [lastRelayHttpBaseUrl, setLastRelayHttpBaseUrl] = useState(discoveredRelayHttpBaseUrl);
+  if (
+    (!relayDiscovery.refreshing || discoveredRelayHttpBaseUrl !== undefined) &&
+    discoveredRelayHttpBaseUrl !== lastRelayHttpBaseUrl
+  ) {
+    setLastRelayHttpBaseUrl(discoveredRelayHttpBaseUrl);
+  }
   const prepared = usePreparedConnection(environmentId);
   const connectedTarget = isConnected && prepared._tag === "Some" ? prepared.value.target : null;
-  const mcpUrl = useEnvironmentMcpUrl(environment.entry, connectedTarget);
+  const mcpUrl = environmentMcpUrl({
+    entry: environment.entry,
+    relayHttpBaseUrl: discoveredRelayHttpBaseUrl ?? lastRelayHttpBaseUrl,
+    connectedTarget,
+  });
   const machineKind = resolveEnvironmentMachineKind(
     environment.serverConfig ??
       (lastDescriptor === undefined ? null : { environment: lastDescriptor }),
@@ -2060,7 +2100,6 @@ export function ConnectionsSettings() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { environments } = useEnvironments();
   const primaryEnvironment = usePrimaryEnvironment();
-  const primaryMcpUrl = useEnvironmentMcpUrl(primaryEnvironment?.entry ?? null);
   const connectPairing = useAtomCommand(connectPairingAtom, { reportFailure: false });
   const connectSshEnvironment = useAtomCommand(connectSshEnvironmentAtom, {
     reportFailure: false,
@@ -2070,6 +2109,22 @@ export function ConnectionsSettings() {
     reportFailure: false,
   });
   const relayDiscoveryState = useRelayEnvironmentDiscovery();
+  // Discovery clears its map while refreshing; retain URLs only until it settles.
+  const [lastDiscovery, setLastDiscovery] = useState(relayDiscoveryState);
+  if (!relayDiscoveryState.refreshing && relayDiscoveryState !== lastDiscovery) {
+    setLastDiscovery(relayDiscoveryState);
+  }
+  const primaryMcpUrl = primaryEnvironment
+    ? environmentMcpUrl({
+        entry: primaryEnvironment.entry,
+        relayHttpBaseUrl: (
+          relayDiscoveryState.environments.get(primaryEnvironment.environmentId) ??
+          (relayDiscoveryState.refreshing
+            ? lastDiscovery.environments.get(primaryEnvironment.environmentId)
+            : undefined)
+        )?.environment.endpoint.httpBaseUrl,
+      })
+    : null;
   const setEnvironmentEnabled = useAtomCommand(environmentCatalog.setEnabled, {
     reportFailure: false,
   });

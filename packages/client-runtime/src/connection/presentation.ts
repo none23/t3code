@@ -96,50 +96,46 @@ export function presentEnvironmentConnection(
 
 /**
  * The address an agent outside T3 (Claude Code, Codex) uses to reach this
- * environment's MCP server. Prefer T3 Connect so hosted agents can reach it,
- * regardless of how this client connects. Otherwise use the connected route,
- * then the first route in preference order with an address. An SSH forward
- * alone has no stable address to hand out.
+ * environment's MCP server: prefer public T3 Connect, then the connected
+ * route an agent beside this client can reach, else the first route in
+ * preference order that has an address. SSH connections ride a local forward
+ * that disappears with the client, so they have no stable address.
  */
 export function environmentMcpUrl(input: {
   readonly entry: ConnectionCatalogEntry;
   readonly relayHttpBaseUrl?: string | undefined;
   readonly connectedTarget?: ConnectionTarget | null | undefined;
 }): string | null {
-  let relayMcpUrl = input.relayHttpBaseUrl ? mcpUrlFromBase(input.relayHttpBaseUrl) : null;
-  // Publish-only links can advertise the host's localhost. An outside agent
-  // would resolve that address to its own machine.
-  if (relayMcpUrl && isLocalLoopbackHost(relayMcpUrl.hostname)) relayMcpUrl = null;
-  if (relayMcpUrl?.protocol === "https:") return relayMcpUrl.toString();
+  // Publish-only links can advertise the relay host's localhost.
+  const relayMcpUrl = input.relayHttpBaseUrl ? mcpUrlFromBase(input.relayHttpBaseUrl, false) : null;
+  if (relayMcpUrl?.startsWith("https://")) return relayMcpUrl;
 
-  const routes = connectionRoutes(input.entry);
   const connectedRouteId = input.connectedTarget ? connectionRouteId(input.connectedTarget) : null;
+  const routes = connectionRoutes(input.entry);
   const connectedRoute = routes.find(
     (route) => connectionRouteId(route.target) === connectedRouteId,
   );
   for (const route of connectedRoute ? [connectedRoute, ...routes] : routes) {
-    if (route.target._tag === "RelayConnectionTarget") {
-      if (relayMcpUrl !== null) return relayMcpUrl.toString();
-      continue;
-    }
-    const httpBaseUrl = routeHttpBaseUrl(route);
+    const httpBaseUrl =
+      route.target._tag === "RelayConnectionTarget" ? relayMcpUrl : routeHttpBaseUrl(route);
     const mcpUrl = httpBaseUrl === null ? null : mcpUrlFromBase(httpBaseUrl);
-    if (mcpUrl !== null) return mcpUrl.toString();
+    if (mcpUrl !== null) return mcpUrl;
   }
   return null;
 }
 
-function mcpUrlFromBase(httpBaseUrl: string): URL | null {
+function mcpUrlFromBase(httpBaseUrl: string, allowLoopback = true): string | null {
   let url: URL;
   try {
     url = new URL(httpBaseUrl);
   } catch {
     return null;
   }
+  if (!allowLoopback && isLocalLoopbackHost(url.hostname)) return null;
   url.pathname = "/mcp";
   url.search = "";
   url.hash = "";
-  return url;
+  return url.toString();
 }
 
 export function connectionCatalogDisplayUrl(entry: ConnectionCatalogEntry): string | null {
