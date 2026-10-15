@@ -2,6 +2,7 @@ package expo.modules.t3nativecontrols
 
 import android.content.Context
 import android.view.ViewGroup
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -67,7 +69,7 @@ class T3WorkspaceNavigationModule : Module() {
       Prop("unselectedColor") { view: T3WorkspaceNavigationView, value: Int ->
         view.unselectedColor = value
       }
-      Events("onTabSelected")
+      Events("onItemPress")
     }
   }
 }
@@ -80,7 +82,7 @@ class T3WorkspaceNavigationView(
   // Compose must remeasure native children when Yoga resizes the folded window.
   override val shouldUseAndroidLayout = true
 
-  private val onTabSelected by EventDispatcher()
+  private val onItemPress by EventDispatcher()
   var selectedTab by mutableStateOf("threads")
   var rail by mutableStateOf(false)
   var dark by mutableStateOf(false)
@@ -136,8 +138,8 @@ class T3WorkspaceNavigationView(
                 tabs.forEach { tab ->
                   NavigationRailItem(
                     selected = selectedTab == tab,
-                    onClick = { onTabSelected(mapOf("tab" to tab)) },
-                    icon = { tabIcon(tab) },
+                    onClick = { onItemPress(mapOf("item" to tab)) },
+                    icon = { itemIcon(tab) },
                     label = {
                       val title = if (tab == "threads") "Chats" else "PRs"
                       Text(title, fontSize = (12 * textScale).sp)
@@ -152,6 +154,11 @@ class T3WorkspaceNavigationView(
                   )
                 }
                 Spacer(Modifier.weight(1f))
+                listOf("usage", "settings").forEach { item ->
+                  IconButton(onClick = { onItemPress(mapOf("item" to item)) }) {
+                    itemIcon(item, Color(unselectedColor), Modifier.size(iconSize.dp))
+                  }
+                }
               }
             } else {
               Surface(
@@ -165,18 +172,20 @@ class T3WorkspaceNavigationView(
                   modifier = Modifier.fillMaxSize().selectableGroup(),
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
-                  tabs.forEach { tab ->
-                    val selected = selectedTab == tab
+                  (tabs + listOf("usage", "settings")).forEach { item ->
+                    val selected = selectedTab == item
+                    val onClick = { onItemPress(mapOf("item" to item)) }
+                    val action = if (item in tabs) {
+                      Modifier.selectable(selected = selected, role = Role.Tab, onClick = onClick)
+                    } else {
+                      Modifier.clickable(role = Role.Button, onClick = onClick)
+                    }
                     Box(
                       modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(CircleShape)
-                        .selectable(
-                          selected = selected,
-                          role = Role.Tab,
-                          onClick = { onTabSelected(mapOf("tab" to tab)) },
-                        )
+                        .then(action)
                         .padding(4.dp)
                         .background(
                           if (selected) Color(indicatorColor) else Color.Transparent,
@@ -184,8 +193,8 @@ class T3WorkspaceNavigationView(
                         ),
                       contentAlignment = Alignment.Center,
                     ) {
-                      tabIcon(
-                        tab,
+                      itemIcon(
+                        item,
                         Color(if (selected) selectedColor else unselectedColor),
                         Modifier.size(iconSize.dp),
                       )
@@ -202,19 +211,20 @@ class T3WorkspaceNavigationView(
   }
 
   @Composable
-  private fun tabIcon(
-    tab: String,
+  private fun itemIcon(
+    item: String,
     tint: Color = LocalContentColor.current,
     modifier: Modifier = Modifier
   ) {
-    val drawable = if (tab == "threads") {
-      R.drawable.t3_chats
-    } else {
-      R.drawable.t3_pull_requests
+    val (drawable, title) = when (item) {
+      "threads" -> R.drawable.t3_chats to "Chats"
+      "pullRequests" -> R.drawable.t3_pull_requests to "Pull requests"
+      "usage" -> R.drawable.t3_usage to "Usage"
+      else -> R.drawable.t3_settings to "Settings"
     }
     Icon(
       painter = painterResource(drawable),
-      contentDescription = if (tab == "threads") "Chats" else "Pull requests",
+      contentDescription = title,
       modifier = modifier,
       tint = tint,
     )

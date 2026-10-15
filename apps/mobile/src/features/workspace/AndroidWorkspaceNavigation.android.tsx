@@ -4,6 +4,7 @@ import { androidWorkspaceNavigationState } from "../../lib/android-workspace-nav
 import {
   Keyboard,
   processColor,
+  useWindowDimensions,
   View,
   type NativeSyntheticEvent,
   type ViewProps,
@@ -29,7 +30,9 @@ interface NativeNavigationProps extends ViewProps {
   readonly selectedColor: number;
   readonly indicatorColor: number;
   readonly unselectedColor: number;
-  readonly onTabSelected: (event: NativeSyntheticEvent<{ readonly tab: WorkspaceTab }>) => void;
+  readonly onItemPress: (
+    event: NativeSyntheticEvent<{ readonly item: WorkspaceTab | "usage" | "settings" }>,
+  ) => void;
 }
 
 const NativeNavigation = requireNativeView<NativeNavigationProps>("T3WorkspaceNavigation");
@@ -46,6 +49,7 @@ export function AndroidWorkspaceNavigation(props: {
   const workspace = useWorkspaceTabs()!;
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const { themeAppearance, themeVariables: colors } = useAppearancePreferences();
   const { scale, iconSize, fabSize } = useAndroidControlSizing();
@@ -78,9 +82,17 @@ export function AndroidWorkspaceNavigation(props: {
         selectedColor={nativeColor(selectedColor)}
         indicatorColor={nativeColor(indicatorColor)}
         unselectedColor={nativeColor(unselectedColor)}
-        onTabSelected={(event) => {
+        onItemPress={(event) => {
           Keyboard.dismiss();
-          const tab = event.nativeEvent.tab;
+          const item = event.nativeEvent.item;
+          if (item === "usage" || item === "settings") {
+            navigation.navigate("SettingsSheet", {
+              screen: "SettingsContent",
+              params: { screen: item === "usage" ? "SettingsUsage" : "Settings" },
+            });
+            return;
+          }
+          const tab = item;
           if (tab !== workspace.state.selectedTab) {
             workspace.dispatch({ type: "select", tab });
             navigation.dispatch((state) =>
@@ -93,7 +105,14 @@ export function AndroidWorkspaceNavigation(props: {
           rail
             ? { flex: 1 }
             : {
-                width: ANDROID_WORKSPACE_DOCK.tabsWidth * Math.max(1, scale),
+                width: Math.min(
+                  ANDROID_WORKSPACE_DOCK.width * Math.max(1, scale),
+                  width -
+                    Math.max(insets.left, ANDROID_WORKSPACE_DOCK.edge) -
+                    Math.max(insets.right, ANDROID_WORKSPACE_DOCK.edge) -
+                    ANDROID_WORKSPACE_DOCK.gap -
+                    fabSize,
+                ),
                 height: fabSize,
               }
         }

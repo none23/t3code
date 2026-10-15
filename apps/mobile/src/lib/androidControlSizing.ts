@@ -17,7 +17,7 @@ export function resolveAndroidControlSizing(baseFontSize: number) {
     largeFabSize: Math.round(96 * scale),
     menuWidth: Math.round(250 * scale),
     menuItemHeight: Math.max(48, Math.round(48 * scale)),
-    // Two floating actions, their gap, and the space below the lower action.
-    fabClearance: fabSize * 2 + 36,
+    // Leave space above and below the floating compose action.
+    fabClearance: fabSize + 32,
   };
 }

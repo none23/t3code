@@ -100,15 +100,6 @@ export function MaterialPullRequestToolbar(props: { readonly onRequestVisibility
                 icon: "magnifyingglass",
                 onPress: openSearch,
               },
-              {
-                accessibilityLabel: "Open settings",
-                icon: "gearshape",
-                onPress: () =>
-                  navigation.navigate("SettingsSheet", {
-                    screen: "SettingsContent",
-                    params: { screen: "Settings" },
-                  }),
-              },
             ]
       }
     />

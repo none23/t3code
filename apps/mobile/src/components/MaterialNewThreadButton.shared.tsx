@@ -4,12 +4,10 @@ import { cn } from "../lib/cn";
 import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
 
-/** Shared compose action for the floating button and empty workspace. */
+/** Compose action for an empty workspace. */
 export function MaterialNewThreadButton(props: {
   readonly onPress: () => void;
   readonly extended?: boolean;
-  readonly expanded?: boolean;
-  readonly maxWidth?: number;
   readonly className?: string;
   readonly style?: StyleProp<ViewStyle>;
 }) {
@@ -33,7 +31,7 @@ export function MaterialNewThreadButton(props: {
         tintColorClassName="accent-primary-foreground"
         type="monochrome"
       />
-      {props.extended && props.expanded !== false ? (
+      {props.extended ? (
         <AppText className="text-[16px] font-t3-medium text-primary-foreground">New thread</AppText>
       ) : null}
     </Pressable>

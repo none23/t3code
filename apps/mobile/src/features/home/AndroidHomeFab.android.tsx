@@ -1,63 +1,26 @@
-import { useCallback, useRef, useState, type ComponentProps } from "react";
-import {
-  useWindowDimensions,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from "react-native";
+import type { ComponentProps } from "react";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MaterialNewThreadButton } from "../../components/MaterialNewThreadButton";
-import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
+import { MaterialFloatingActionButton } from "../../components/MaterialFloatingActionButton";
 import type { AndroidHomeFabLayout as SharedAndroidHomeFabLayout } from "./AndroidHomeFab.shared";
 import { useWorkspaceState } from "../../state/workspace";
-import { MaterialFabScrollContext } from "./MaterialFabScrollContext";
-import { updateMaterialFabScroll } from "./material-fab-scroll";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
-import { ANDROID_WORKSPACE_DOCK } from "../workspace/workspace-tabs-state";
 
 export function AndroidHomeFabLayout(props: ComponentProps<typeof SharedAndroidHomeFabLayout>) {
   const insets = useSafeAreaInsets();
-  const { appearance } = useAppearancePreferences();
-  const { fontScale } = useWindowDimensions();
-  const { scale } = useAndroidControlSizing();
-  const workspace = useWorkspaceTabs();
-  const [layoutWidth, setLayoutWidth] = useState<number | null>(null);
   const { state } = useWorkspaceState();
-  const [expanded, setExpanded] = useState(true);
-  const scrollState = useRef({ anchor: 0, expanded: true });
-  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const next = updateMaterialFabScroll(
-      scrollState.current,
-      contentOffset.y,
-      contentSize.height - layoutMeasurement.height,
-    );
-    if (next.expanded !== scrollState.current.expanded) setExpanded(next.expanded);
-    scrollState.current = next;
-  }, []);
 
-  // Remount only the FAB when its font or pane changes to clear the cached expanded width.
   return (
-    <View className="flex-1" onLayout={(event) => setLayoutWidth(event.nativeEvent.layout.width)}>
-      <MaterialFabScrollContext value={onScroll}>{props.children}</MaterialFabScrollContext>
-      {!props.disabled && state.hasConnections && layoutWidth !== null ? (
-        <MaterialNewThreadButton
-          key={`${appearance.baseFontSize}:${fontScale}:${layoutWidth}`}
-          extended
-          expanded={expanded}
-          maxWidth={
-            workspace && !props.sidebar
-              ? layoutWidth -
-                Math.max(insets.left, ANDROID_WORKSPACE_DOCK.edge) -
-                ANDROID_WORKSPACE_DOCK.tabsWidth * Math.max(1, scale) -
-                ANDROID_WORKSPACE_DOCK.gap -
-                20
-              : undefined
-          }
+    <View className="flex-1">
+      {props.children}
+      {!props.disabled && state.hasConnections ? (
+        <MaterialFloatingActionButton
+          icon="square.and.pencil"
+          label="New thread"
+          tone="primary"
           onPress={props.onStartNewTask}
-          className="absolute right-5"
+          className="absolute"
           style={{
+            right: Math.max(insets.right, 20),
             bottom: props.sidebar
               ? Math.max(insets.bottom, 12) + 6
               : Math.max(insets.bottom, 16) + 16,

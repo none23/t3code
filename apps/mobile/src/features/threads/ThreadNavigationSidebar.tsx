@@ -52,7 +52,6 @@ import {
 import { SidebarHeaderActions } from "./sidebar-header-actions";
 import { MaterialThreadListToolbar } from "../home/MaterialThreadListToolbar";
 import { useMaterialToolbarLayout } from "../../components/useMaterialToolbarLayout";
-import { useMaterialFabScroll } from "../home/MaterialFabScrollContext";
 import { SidebarFilterButton } from "./sidebar-filter-button";
 import { createSidebarHeaderItems } from "./sidebar-native-header-items";
 import { SidebarNavigationShell } from "./sidebar-navigation-shell";
@@ -591,9 +590,7 @@ function ThreadNavigationSidebarPane(
   const handleScrollBeginDrag = useCallback(() => {
     openSwipeableRef.current?.close();
   }, []);
-  const onMaterialFabScroll = useMaterialFabScroll();
   const { swipeEnabled, scrollGateHandlers } = useSwipeableScrollGate({
-    onScroll: onMaterialFabScroll,
     onScrollBeginDrag: handleScrollBeginDrag,
   });
   // The sticky header's project shells and search maps feed row props, so
@@ -1044,7 +1041,6 @@ function ThreadNavigationSidebarPane(
           filterActions={listMenuActions}
           filterCustomized={filterCustomized}
           onFilterAction={handleListMenuAction}
-          onOpenSettings={props.onOpenSettings}
           onOpenEnvironments={props.onOpenEnvironmentSettings}
           onRequestVisibility={props.onRequestVisibility}
         />
