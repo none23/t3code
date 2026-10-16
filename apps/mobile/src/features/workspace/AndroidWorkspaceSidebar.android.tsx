@@ -1,8 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { View } from "react-native";
-import { MaterialScreenContent } from "../../components/MaterialScreenContent";
 import { PullRequestsScreen } from "../pull-requests/PullRequestsScreen";
-import { MaterialPullRequestToolbar } from "../pull-requests/MaterialPullRequestToolbar.android";
 import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 export function AndroidWorkspaceSidebar(props: {
@@ -17,10 +15,11 @@ export function AndroidWorkspaceSidebar(props: {
   ) : workspace.state.selectedTab === "pullRequests" ? (
     <WorkspaceTabsContext value={context}>
       <View className="flex-1 bg-header">
-        <MaterialPullRequestToolbar onRequestVisibility={props.onRequestVisibility} />
-        <MaterialScreenContent insetHorizontal>
-          <PullRequestsScreen sidebar selectedPullRequestKey={props.selectedPullRequestKey} />
-        </MaterialScreenContent>
+        <PullRequestsScreen
+          sidebar
+          selectedPullRequestKey={props.selectedPullRequestKey}
+          onRequestVisibility={props.onRequestVisibility}
+        />
       </View>
     </WorkspaceTabsContext>
   ) : null;

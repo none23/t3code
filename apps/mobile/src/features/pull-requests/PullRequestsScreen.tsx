@@ -24,6 +24,8 @@ import { useProjects } from "../../state/entities";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { PullRequestListRow } from "./PullRequestListRow";
 import { PullRequestListFilters } from "./PullRequestListFilters";
+import { MaterialPullRequestToolbar } from "./MaterialPullRequestToolbar.android";
+import { MaterialScreenContent } from "../../components/MaterialScreenContent";
 import { usePullRequestList } from "./usePullRequestList";
 import { usePullRequestListControls } from "./usePullRequestListControls";
 import { usePullRequestListActions } from "./usePullRequestListActions";
@@ -57,6 +59,7 @@ export function PullRequestsScreen(
   props: {
     readonly sidebar?: boolean;
     readonly selectedPullRequestKey?: string | null;
+    readonly onRequestVisibility?: () => void;
   } = {},
 ) {
   const navigation = useNavigation();
@@ -207,7 +210,28 @@ export function PullRequestsScreen(
     ? entries.findIndex((entry) => pullRequestKey(entry) === initialAnchor.key)
     : -1;
 
-  return (
+  const filters = (
+    <PullRequestListFilters
+      environments={environments.map((item) => ({
+        id: String(item.environmentId),
+        label: item.environmentLabel,
+      }))}
+      environmentId={environmentId}
+      onEnvironmentChange={listControls.setEnvironmentId}
+      value={controls}
+      onChange={(next) => {
+        listControls.setControls(environmentId, next);
+        void listRef.current?.scrollToOffset({
+          offset: Platform.OS === "ios" ? -insets.top : 0,
+          animated: false,
+        });
+      }}
+      authors={knownFacets.environmentId === environmentId ? knownFacets.authors : facets.authors}
+      labels={knownFacets.environmentId === environmentId ? knownFacets.labels : facets.labels}
+      projects={projects}
+    />
+  );
+  const content = (
     <View className={sidebar ? "flex-1 bg-drawer" : "flex-1 bg-screen"}>
       <LegendList
         ref={listRef}
@@ -272,29 +296,7 @@ export function PullRequestsScreen(
         renderItem={renderPullRequest}
         ListHeaderComponent={
           <>
-            <PullRequestListFilters
-              environments={environments.map((item) => ({
-                id: String(item.environmentId),
-                label: item.environmentLabel,
-              }))}
-              environmentId={environmentId}
-              onEnvironmentChange={listControls.setEnvironmentId}
-              value={controls}
-              onChange={(next) => {
-                listControls.setControls(environmentId, next);
-                void listRef.current?.scrollToOffset({
-                  offset: Platform.OS === "ios" ? -insets.top : 0,
-                  animated: false,
-                });
-              }}
-              authors={
-                knownFacets.environmentId === environmentId ? knownFacets.authors : facets.authors
-              }
-              labels={
-                knownFacets.environmentId === environmentId ? knownFacets.labels : facets.labels
-              }
-              projects={projects}
-            />
+            {Platform.OS !== "android" ? filters : null}
             {result.data?.errors.length ? (
               <Text className="px-4 py-3 text-sm text-foreground-muted">
                 {result.data.errors
@@ -361,5 +363,16 @@ export function PullRequestsScreen(
         }
       />
     </View>
+  );
+  return (
+    <>
+      {Platform.OS === "android" ? (
+        <MaterialPullRequestToolbar
+          filters={filters}
+          onRequestVisibility={props.onRequestVisibility}
+        />
+      ) : null}
+      <MaterialScreenContent insetHorizontal={sidebar}>{content}</MaterialScreenContent>
+    </>
   );
 }

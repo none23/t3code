@@ -1,5 +1,5 @@
 import { useNavigation, useNavigationState } from "@react-navigation/native";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { BackHandler, Keyboard, type TextInputInstance } from "react-native";
 import { AndroidHeaderIconButton } from "../../components/AndroidScreenHeader";
 import { MaterialSearchField } from "../../components/MaterialSearchField";
@@ -8,7 +8,10 @@ import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands
 import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
 
 /** PR search shares the thread list's native Android header placement. */
-export function MaterialPullRequestToolbar(props: { readonly onRequestVisibility?: () => void }) {
+export function MaterialPullRequestToolbar(props: {
+  readonly filters: ReactNode;
+  readonly onRequestVisibility?: () => void;
+}) {
   const navigation = useNavigation();
   const workspace = useWorkspaceTabs()!;
   const { dispatch, getScrollOffset, recordScrollOffset, isTabActive } = workspace;
@@ -73,13 +76,16 @@ export function MaterialPullRequestToolbar(props: { readonly onRequestVisibility
         ) : undefined
       }
       trailing={
-        !searching ? (
-          <AndroidHeaderIconButton
-            accessibilityLabel="Search pull requests"
-            icon="magnifyingglass"
-            onPress={openSearch}
-          />
-        ) : null
+        <>
+          {!searching ? (
+            <AndroidHeaderIconButton
+              accessibilityLabel="Search pull requests"
+              icon="magnifyingglass"
+              onPress={openSearch}
+            />
+          ) : null}
+          {props.filters}
+        </>
       }
     />
   );

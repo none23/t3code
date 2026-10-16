@@ -5,11 +5,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { EmptyState } from "../../components/EmptyState";
-import { MaterialScreenContent } from "../../components/MaterialScreenContent";
 import { useAndroidControlSizing } from "../../components/useAndroidControlSizing";
 import { HomeRouteScreen } from "../home/HomeRouteScreen";
 import { PullRequestsScreen } from "../pull-requests/PullRequestsScreen";
-import { MaterialPullRequestToolbar } from "../pull-requests/MaterialPullRequestToolbar.android";
 import { SettingsRouteScreen } from "../settings/SettingsRouteScreen";
 import { UsageRouteScreen } from "../usage/UsageRouteScreen";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
@@ -61,12 +59,7 @@ export function WorkspaceRootScreen() {
           ) : workspace.state.selectedTab === "threads" ? (
             <HomeRouteScreen />
           ) : (
-            <>
-              <MaterialPullRequestToolbar />
-              <MaterialScreenContent>
-                <PullRequestsScreen />
-              </MaterialScreenContent>
-            </>
+            <PullRequestsScreen />
           )}
         </View>
         {!layout.usesSplitView && !keyboardVisible ? (
