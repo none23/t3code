@@ -25,6 +25,7 @@ export interface WorkspaceScrollAnchor {
 export const WorkspaceTabsContext = createContext<{
   readonly state: WorkspaceTabsState;
   readonly dispatch: Dispatch<WorkspaceTabsAction>;
+  readonly navigateToTab: (tab: WorkspaceTab, usageTab?: string) => void;
   readonly isTabActive: (tab: WorkspaceTab) => boolean;
   readonly bottomClearance: number;
   readonly getScrollOffset: (tab: WorkspaceTab) => number;
@@ -38,14 +39,25 @@ export function useWorkspaceTabs() {
 }
 
 /** The tab controller and its list screens share state across native container changes. */
-export function WorkspaceTabsProvider(props: { readonly children: ReactNode }) {
+export function WorkspaceTabsProvider(props: {
+  readonly children: ReactNode;
+  readonly onNavigateToTab?: (usageTab?: string) => void;
+}) {
   const [state, dispatch] = useReducer(workspaceTabsReducer, undefined, initialWorkspaceTabsState);
+  const { onNavigateToTab } = props;
+  const navigateToTab = useCallback(
+    (tab: WorkspaceTab, usageTab?: string) => {
+      dispatch({ type: "select", tab });
+      onNavigateToTab?.(usageTab);
+    },
+    [onNavigateToTab],
+  );
   const activeTab = useRef(state.selectedTab);
   useLayoutEffect(() => {
     activeTab.current = state.selectedTab;
   }, [state.selectedTab]);
   const isTabActive = useCallback((tab: WorkspaceTab) => activeTab.current === tab, []);
-  const scrollOffsets = useRef({ threads: 0, pullRequests: 0 });
+  const scrollOffsets = useRef({ threads: 0, pullRequests: 0, usage: 0, settings: 0 });
   const scrollAnchors = useRef<Partial<Record<WorkspaceTab, WorkspaceScrollAnchor>>>({});
   const getScrollOffset = useCallback((tab: WorkspaceTab) => scrollOffsets.current[tab], []);
   const recordScrollOffset = useCallback((tab: WorkspaceTab, offset: number) => {
@@ -59,6 +71,7 @@ export function WorkspaceTabsProvider(props: { readonly children: ReactNode }) {
     () => ({
       state,
       dispatch,
+      navigateToTab,
       isTabActive,
       bottomClearance: 0,
       getScrollOffset,
@@ -66,7 +79,15 @@ export function WorkspaceTabsProvider(props: { readonly children: ReactNode }) {
       getScrollAnchor,
       recordScrollAnchor,
     }),
-    [state, isTabActive, getScrollOffset, recordScrollOffset, getScrollAnchor, recordScrollAnchor],
+    [
+      state,
+      navigateToTab,
+      isTabActive,
+      getScrollOffset,
+      recordScrollOffset,
+      getScrollAnchor,
+      recordScrollAnchor,
+    ],
   );
   return <WorkspaceTabsContext value={context}>{props.children}</WorkspaceTabsContext>;
 }

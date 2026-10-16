@@ -18,6 +18,10 @@ describe("workspace root navigation", () => {
     state = workspaceTabsReducer(state, { type: "scroll", tab: "pullRequests", offset: 240 });
     state = workspaceTabsReducer(state, { type: "search" });
     state = workspaceTabsReducer(state, { type: "query", query: "navigation" });
+    state = workspaceTabsReducer(state, { type: "select", tab: "usage" });
+    expect(state.selectedTab).toBe("usage");
+    state = workspaceTabsReducer(state, { type: "select", tab: "settings" });
+    expect(state.selectedTab).toBe("settings");
     state = workspaceTabsReducer(state, { type: "select", tab: "threads" });
     expect(state.tabs.threads).toMatchObject({
       query: "keyboard",

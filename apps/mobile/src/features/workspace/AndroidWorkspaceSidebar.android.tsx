@@ -14,7 +14,7 @@ export function AndroidWorkspaceSidebar(props: {
   const context = useMemo(() => ({ ...workspace, bottomClearance: 16 }), [workspace]);
   return workspace.state.selectedTab === "threads" ? (
     props.children
-  ) : (
+  ) : workspace.state.selectedTab === "pullRequests" ? (
     <WorkspaceTabsContext value={context}>
       <View className="flex-1 bg-header">
         <MaterialPullRequestToolbar onRequestVisibility={props.onRequestVisibility} />
@@ -23,5 +23,5 @@ export function AndroidWorkspaceSidebar(props: {
         </MaterialScreenContent>
       </View>
     </WorkspaceTabsContext>
-  );
+  ) : null;
 }

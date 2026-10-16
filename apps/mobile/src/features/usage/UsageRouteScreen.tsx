@@ -52,9 +52,13 @@ import { toggleUsageEnvironment } from "./usageEnvironmentSelection";
 import { useRefreshLimits } from "./UsageLimitsSection";
 import { UsageLimitsSection } from "./UsageLimitsPooled";
 import { ControlPillMenu } from "../../components/ControlPill";
+import { AndroidAnchoredMenu } from "../../components/AndroidAnchoredMenu";
+import { AndroidHeaderIconButton } from "../../components/AndroidScreenHeader";
 import { SymbolView } from "../../components/AppSymbol";
 import type { UsageChartMetric } from "./usageChartData";
 import { PROVIDER_LABEL, useProviderColors, useUsageMixColors } from "./usageProviders";
+import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
+import { AndroidSettingsTabRoute } from "../settings/AndroidSettingsTabRoute";
 
 type UsageTab = "usage" | "limits";
 const TAB_OPTIONS = [
@@ -85,10 +89,19 @@ const CURSOR_KEYCHAIN_COPY = "Requires access to your Cursor login in macOS Keyc
  * period; Limits is the live subscription quota, which has no period. Both
  * pull to refresh, each refreshing its own data.
  */
-export function UsageRouteScreen() {
+export function UsageRouteScreen(props: { readonly workspaceRoot?: boolean }) {
+  return Platform.OS === "android" && !props.workspaceRoot ? (
+    <AndroidSettingsTabRoute tab="usage" />
+  ) : (
+    <UsagePage {...props} />
+  );
+}
+
+function UsagePage(props: { readonly workspaceRoot?: boolean }) {
   const route = useRoute<RouteProp<{ Usage: { tab?: string } | undefined }, "Usage">>();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const workspace = useWorkspaceTabs();
   // Preserve the Limits default while honoring explicit widget/navigation links.
   const [selection, setSelection] = useState(() => ({
     params: route.params,
@@ -237,25 +250,41 @@ export function UsageRouteScreen() {
   const environmentFilter = useMemo(
     () =>
       showEnvironmentFilter ? (
-        <ControlPillMenu
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel="Filter usage environments"
-          title="Environments"
-          actions={environmentActions}
-          onPressAction={({ nativeEvent }) => selectEnvironment(nativeEvent.event)}
-        >
-          <Pressable
+        Platform.OS === "android" ? (
+          <AndroidAnchoredMenu
+            title="Environments"
+            actions={environmentActions}
+            onPressAction={({ nativeEvent }) => selectEnvironment(nativeEvent.event)}
+          >
+            {(open) => (
+              <AndroidHeaderIconButton
+                accessibilityLabel="Filter usage environments"
+                icon={filterIcon}
+                onPress={open}
+              />
+            )}
+          </AndroidAnchoredMenu>
+        ) : (
+          <ControlPillMenu
+            accessible
             accessibilityRole="button"
             accessibilityLabel="Filter usage environments"
-            className={cn(
-              "items-center justify-center rounded-full",
-              Platform.OS === "ios" ? "size-[28px]" : "size-[44px]",
-            )}
+            title="Environments"
+            actions={environmentActions}
+            onPressAction={({ nativeEvent }) => selectEnvironment(nativeEvent.event)}
           >
-            <SymbolView name={filterIcon} size={22} tintColorClassName="accent-icon" />
-          </Pressable>
-        </ControlPillMenu>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Filter usage environments"
+              className={cn(
+                "items-center justify-center rounded-full",
+                Platform.OS === "ios" ? "size-[28px]" : "size-[44px]",
+              )}
+            >
+              <SymbolView name={filterIcon} size={22} tintColorClassName="accent-icon" />
+            </Pressable>
+          </ControlPillMenu>
+        )
       ) : null,
     [showEnvironmentFilter, environmentActions, selectEnvironment, filterIcon],
   );
@@ -267,13 +296,18 @@ export function UsageRouteScreen() {
   }, [navigation, environmentFilter]);
 
   return (
-    <SettingsScreen title="Usage" trailing={environmentFilter}>
+    <SettingsScreen title="Usage" workspaceRoot={props.workspaceRoot} trailing={environmentFilter}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         className="flex-1"
         contentContainerClassName="gap-6 px-5 pt-4"
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+        contentContainerStyle={{
+          paddingBottom: Math.max(
+            Math.max(insets.bottom, 18) + 18,
+            props.workspaceRoot ? (workspace?.bottomClearance ?? 0) : 0,
+          ),
+        }}
         refreshControl={
           showingLimits || canReadDiagnostics ? (
             <RefreshControl

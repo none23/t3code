@@ -5,20 +5,17 @@ import {
   BackHandler,
   Keyboard,
   type TextInputInstance,
-  View,
   type LayoutChangeEvent,
 } from "react-native";
 import type { MenuAction } from "@react-native-menu/menu";
 
 import { AndroidHeaderIconButton } from "../../components/AndroidScreenHeader";
-import { CompactBrandTitle } from "../../components/CompactBrandTitle";
 import { AndroidAnchoredMenu } from "../../components/AndroidAnchoredMenu";
 import { ControlPillMenu } from "../../components/ControlPill";
 import { MaterialSearchField } from "../../components/MaterialSearchField";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
-import { WorkspaceConnectionTitle } from "./WorkspaceConnectionTitle";
 import { useWorkspaceState } from "../../state/workspace";
-import { useMaterialToolbarLayout } from "../../components/useMaterialToolbarLayout";
+import { AndroidWorkspaceHeader } from "../workspace/AndroidWorkspaceHeader";
 
 /** One toolbar height for the compact list and expanded sidebar, including search. */
 export function MaterialThreadListToolbar(props: {
@@ -38,7 +35,6 @@ export function MaterialThreadListToolbar(props: {
   const homeFocused = useNavigationState((state) => state.routes[state.index]?.name === "Home");
   const listFocused =
     homeFocused && (workspace === null || workspace.state.selectedTab === "threads");
-  const { height: toolbarHeight, ...headerPadding } = useMaterialToolbarLayout();
   const { state } = useWorkspaceState();
   const { onRequestVisibility, onSearchQueryChange } = props;
   const searchRef = useRef<TextInputInstance>(null);
@@ -91,50 +87,43 @@ export function MaterialThreadListToolbar(props: {
   );
 
   return (
-    <View
+    <AndroidWorkspaceHeader
+      title="Chats"
       onLayout={props.onLayout}
-      className={props.sidebar ? "absolute inset-x-0 top-0 z-[4] bg-header px-2" : "bg-header px-2"}
-      style={headerPadding}
-    >
-      <View className="flex-row items-center gap-1" style={{ minHeight: toolbarHeight }}>
-        {searching ? (
-          <>
-            <AndroidHeaderIconButton
-              accessibilityLabel="Close search"
-              icon="arrow.left"
-              onPress={closeSearch}
-            />
-            {searchField}
-          </>
-        ) : (
-          <>
-            {/* Match the visible inset of the trailing 48dp icon button. */}
-            <View className="min-w-0 flex-1 pl-4">
-              <WorkspaceConnectionTitle
-                grow
-                onPress={props.onOpenEnvironments}
-                brand={<CompactBrandTitle allowFontScaling={false} />}
-              />
-            </View>
+      sidebar={props.sidebar}
+      onOpenEnvironments={props.onOpenEnvironments}
+      titleContent={searching ? searchField : undefined}
+      leading={
+        searching ? (
+          <AndroidHeaderIconButton
+            accessibilityLabel="Close search"
+            icon="arrow.left"
+            onPress={closeSearch}
+          />
+        ) : undefined
+      }
+      trailing={
+        <>
+          {!searching ? (
             <AndroidHeaderIconButton
               accessibilityLabel="Search threads"
               icon="magnifyingglass"
               onPress={openSearch}
             />
-          </>
-        )}
-        {state.hasConnections ? (
-          <AndroidAnchoredMenu actions={props.filterActions} onPressAction={props.onFilterAction}>
-            {(open) => (
-              <AndroidHeaderIconButton
-                accessibilityLabel="Filter threads"
-                icon={filterIcon}
-                onPress={open}
-              />
-            )}
-          </AndroidAnchoredMenu>
-        ) : null}
-      </View>
-    </View>
+          ) : null}
+          {state.hasConnections ? (
+            <AndroidAnchoredMenu actions={props.filterActions} onPressAction={props.onFilterAction}>
+              {(open) => (
+                <AndroidHeaderIconButton
+                  accessibilityLabel="Filter threads"
+                  icon={filterIcon}
+                  onPress={open}
+                />
+              )}
+            </AndroidAnchoredMenu>
+          ) : null}
+        </>
+      }
+    />
   );
 }

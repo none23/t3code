@@ -442,11 +442,14 @@ const SettingsSheetStack = createV5SheetStackNavigator({
       screen: SettingsContentStack,
       options: NESTED_NAVIGATOR_OPTIONS,
       linking: "",
-      layout: ({ children }) => (
-        <SettingsEnvironmentFilterProvider>
+      layout: ({ children }) =>
+        Platform.OS === "android" ? (
           <ScheduledTaskEditorProvider>{children}</ScheduledTaskEditorProvider>
-        </SettingsEnvironmentFilterProvider>
-      ),
+        ) : (
+          <SettingsEnvironmentFilterProvider>
+            <ScheduledTaskEditorProvider>{children}</ScheduledTaskEditorProvider>
+          </SettingsEnvironmentFilterProvider>
+        ),
     }),
     SettingsAuth: createNativeStackScreen({
       screen: SettingsAuthRouteScreen,

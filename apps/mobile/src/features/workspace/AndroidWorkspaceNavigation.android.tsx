@@ -1,8 +1,5 @@
 import { requireNativeView } from "expo";
-import { CommonActions, useNavigation } from "@react-navigation/native";
-import { androidWorkspaceNavigationState } from "../../lib/android-workspace-navigation";
 import {
-  Keyboard,
   processColor,
   useWindowDimensions,
   View,
@@ -30,9 +27,7 @@ interface NativeNavigationProps extends ViewProps {
   readonly selectedColor: number;
   readonly indicatorColor: number;
   readonly unselectedColor: number;
-  readonly onItemPress: (
-    event: NativeSyntheticEvent<{ readonly item: WorkspaceTab | "usage" | "settings" }>,
-  ) => void;
+  readonly onItemPress: (event: NativeSyntheticEvent<{ readonly item: WorkspaceTab }>) => void;
 }
 
 const NativeNavigation = requireNativeView<NativeNavigationProps>("T3WorkspaceNavigation");
@@ -47,7 +42,6 @@ export function AndroidWorkspaceNavigation(props: {
   readonly onSelect?: () => void;
 }) {
   const workspace = useWorkspaceTabs()!;
-  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
@@ -83,22 +77,7 @@ export function AndroidWorkspaceNavigation(props: {
         indicatorColor={nativeColor(indicatorColor)}
         unselectedColor={nativeColor(unselectedColor)}
         onItemPress={(event) => {
-          Keyboard.dismiss();
-          const item = event.nativeEvent.item;
-          if (item === "usage" || item === "settings") {
-            navigation.navigate("SettingsSheet", {
-              screen: "SettingsContent",
-              params: { screen: item === "usage" ? "SettingsUsage" : "Settings" },
-            });
-            return;
-          }
-          const tab = item;
-          if (tab !== workspace.state.selectedTab) {
-            workspace.dispatch({ type: "select", tab });
-            navigation.dispatch((state) =>
-              CommonActions.reset(androidWorkspaceNavigationState(state)),
-            );
-          }
+          workspace.navigateToTab(event.nativeEvent.item);
           props.onSelect?.();
         }}
         style={

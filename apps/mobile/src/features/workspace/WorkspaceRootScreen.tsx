@@ -30,6 +30,8 @@ import { useSidebarWorkspaceTabs, useSystemWorkspaceTabBar } from "./useSystemWo
 const TAB_TITLES = {
   threads: "Threads",
   pullRequests: "Pull requests",
+  usage: "Usage",
+  settings: "Settings",
 };
 
 /** Brand and connection status occupy the same leading slot in both roots. */

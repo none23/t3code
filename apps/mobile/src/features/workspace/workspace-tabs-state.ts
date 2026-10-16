@@ -1,4 +1,4 @@
-export type WorkspaceTab = "threads" | "pullRequests";
+export type WorkspaceTab = "threads" | "pullRequests" | "usage" | "settings";
 export type WorkspaceSearchMode = "resting" | "active" | "expanded";
 
 export interface WorkspaceTabState {
@@ -22,7 +22,12 @@ export function initialWorkspaceTabsState(): WorkspaceTabsState {
   return {
     selectedTab: "threads",
     selectionRevision: 0,
-    tabs: { threads: emptyTab(), pullRequests: emptyTab() },
+    tabs: {
+      threads: emptyTab(),
+      pullRequests: emptyTab(),
+      usage: emptyTab(),
+      settings: emptyTab(),
+    },
   };
 }
 
@@ -34,7 +39,7 @@ export type WorkspaceTabsAction =
   | { readonly type: "cancel"; readonly tab?: WorkspaceTab }
   | { readonly type: "scroll"; readonly tab: WorkspaceTab; readonly offset: number };
 
-/** Each root retains its own search; leaving search restores the unfiltered list position. */
+/** List tabs retain their search; leaving search restores the unfiltered list position. */
 export function workspaceTabsReducer(
   state: WorkspaceTabsState,
   action: WorkspaceTabsAction,

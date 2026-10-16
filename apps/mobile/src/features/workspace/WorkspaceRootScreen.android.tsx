@@ -10,6 +10,8 @@ import { useAndroidControlSizing } from "../../components/useAndroidControlSizin
 import { HomeRouteScreen } from "../home/HomeRouteScreen";
 import { PullRequestsScreen } from "../pull-requests/PullRequestsScreen";
 import { MaterialPullRequestToolbar } from "../pull-requests/MaterialPullRequestToolbar.android";
+import { SettingsRouteScreen } from "../settings/SettingsRouteScreen";
+import { UsageRouteScreen } from "../usage/UsageRouteScreen";
 import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { AndroidWorkspaceNavigation } from "./AndroidWorkspaceNavigation";
 import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
@@ -22,11 +24,14 @@ export function WorkspaceRootScreen() {
   const keyboardVisible = useKeyboardState((keyboard) => keyboard.isVisible);
   const { fabSize } = useAndroidControlSizing();
   const bottom = Math.max(insets.bottom, 16) + 16;
-  const bottomClearance = bottom + fabSize + 16;
+  const bottomClearance = layout.usesSplitView ? 0 : bottom + fabSize + 16;
   const context = useMemo(() => ({ ...workspace, bottomClearance }), [workspace, bottomClearance]);
 
   // Split lists live beside the navigator; Home remains an empty detail pane.
-  if (layout.usesSplitView) {
+  if (
+    layout.usesSplitView &&
+    (workspace.state.selectedTab === "threads" || workspace.state.selectedTab === "pullRequests")
+  ) {
     return workspace.state.selectedTab === "threads" ? (
       <HomeRouteScreen />
     ) : (
@@ -49,7 +54,11 @@ export function WorkspaceRootScreen() {
       <View className="flex-1 bg-header">
         <NativeStackScreenOptions options={{ headerShown: false }} />
         <View className="flex-1">
-          {workspace.state.selectedTab === "threads" ? (
+          {workspace.state.selectedTab === "settings" ? (
+            <SettingsRouteScreen workspaceRoot />
+          ) : workspace.state.selectedTab === "usage" ? (
+            <UsageRouteScreen workspaceRoot />
+          ) : workspace.state.selectedTab === "threads" ? (
             <HomeRouteScreen />
           ) : (
             <>
@@ -60,7 +69,7 @@ export function WorkspaceRootScreen() {
             </>
           )}
         </View>
-        {!keyboardVisible ? (
+        {!layout.usesSplitView && !keyboardVisible ? (
           <View
             pointerEvents="box-none"
             className="absolute"

@@ -17,14 +17,26 @@ import {
   SettingsEnvironmentFilterHeader,
 } from "./components/SettingsEnvironmentFilterHeader";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
+import { useWorkspaceTabs } from "../workspace/WorkspaceTabsContext";
+import { AndroidSettingsTabRoute } from "./AndroidSettingsTabRoute";
 
-export function SettingsRouteScreen() {
+export function SettingsRouteScreen(props: { readonly workspaceRoot?: boolean }) {
+  return Platform.OS === "android" && !props.workspaceRoot ? (
+    <AndroidSettingsTabRoute tab="settings" />
+  ) : (
+    <SettingsPage {...props} />
+  );
+}
+
+function SettingsPage(props: { readonly workspaceRoot?: boolean }) {
   const navigation = useNavigation();
+  const workspace = useWorkspaceTabs();
+  const bottomClearance = props.workspaceRoot ? (workspace?.bottomClearance ?? 0) : 0;
   const { layout } = useAdaptiveWorkspaceLayout();
   const content = hasCloudPublicConfig() ? (
-    <ConfiguredSettingsRouteScreen />
+    <ConfiguredSettingsRouteScreen bottomClearance={bottomClearance} />
   ) : (
-    <LocalSettingsRouteScreen />
+    <LocalSettingsRouteScreen bottomClearance={bottomClearance} />
   );
 
   return (
@@ -45,7 +57,11 @@ export function SettingsRouteScreen() {
       ) : null}
       <SettingsEnvironmentFilterHeader closeSettings />
       {Platform.OS === "android" ? (
-        <SettingsScreen title="Settings" trailing={<AndroidSettingsEnvironmentFilter />}>
+        <SettingsScreen
+          title="Settings"
+          workspaceRoot={props.workspaceRoot}
+          trailing={<AndroidSettingsEnvironmentFilter />}
+        >
           {content}
         </SettingsScreen>
       ) : (
@@ -55,7 +71,7 @@ export function SettingsRouteScreen() {
   );
 }
 
-function ConfiguredSettingsRouteScreen() {
+function ConfiguredSettingsRouteScreen(props: { readonly bottomClearance: number }) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
@@ -74,7 +90,9 @@ function ConfiguredSettingsRouteScreen() {
         showsVerticalScrollIndicator={false}
         className="flex-1"
         contentContainerClassName="gap-4 px-5 pt-4"
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+        contentContainerStyle={{
+          paddingBottom: Math.max(Math.max(insets.bottom, 18) + 18, props.bottomClearance),
+        }}
       >
         <SettingsSection title="Connections">
           <SettingsRow
@@ -100,7 +118,7 @@ function ConfiguredSettingsRouteScreen() {
   );
 }
 
-function LocalSettingsRouteScreen() {
+function LocalSettingsRouteScreen(props: { readonly bottomClearance: number }) {
   const insets = useSafeAreaInsets();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const environmentCount = Object.keys(savedConnectionsById).length;
@@ -113,7 +131,7 @@ function LocalSettingsRouteScreen() {
         className="flex-1"
         contentContainerClassName="gap-4 px-5 pt-4"
         contentContainerStyle={{
-          paddingBottom: Math.max(insets.bottom, 18) + 18,
+          paddingBottom: Math.max(Math.max(insets.bottom, 18) + 18, props.bottomClearance),
         }}
       >
         <SettingsSection title="Connections">

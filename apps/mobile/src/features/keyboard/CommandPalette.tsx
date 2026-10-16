@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import { useSettingsRootNavigation } from "../settings/useSettingsRootNavigation";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { THREAD_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -138,6 +139,7 @@ export function CommandPalette(props: {
   readonly onCommand: (command: HardwareKeyboardCommand) => void;
 }) {
   const navigation = useNavigation();
+  const openSettingsRoot = useSettingsRootNavigation();
   const { themeVariables } = useAppearancePreferences();
   const { selectThread } = useAdaptiveWorkspaceLayout();
   const runCommand = props.onCommand;
@@ -198,11 +200,7 @@ export function CommandPalette(props: {
         kind: "action",
         title: "Open settings",
         searchTerms: ["preferences", "configuration"],
-        run: () =>
-          navigation.navigate("SettingsSheet", {
-            screen: "SettingsContent",
-            params: { screen: "Settings" },
-          }),
+        run: () => openSettingsRoot("settings"),
       },
       {
         key: "appearance",
@@ -242,11 +240,7 @@ export function CommandPalette(props: {
         kind: "action",
         title: "Usage",
         searchTerms: ["limits", "accounts", "quota"],
-        run: () =>
-          navigation.navigate("SettingsSheet", {
-            screen: "SettingsContent",
-            params: { screen: "SettingsUsage" },
-          }),
+        run: () => openSettingsRoot("usage"),
       },
       {
         key: "archive",
@@ -346,6 +340,7 @@ export function CommandPalette(props: {
     activeThread,
     activeThreadRef,
     navigation,
+    openSettingsRoot,
     projects,
     runCommand,
     savedConnectionsById,

@@ -1,10 +1,10 @@
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackHeaderItem } from "@react-navigation/native-stack";
 import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
-import { Platform, Pressable } from "react-native";
+import { Platform } from "react-native";
 
-import { ControlPillMenu } from "../../../components/ControlPill";
-import { SymbolView } from "../../../components/AppSymbol";
+import { AndroidAnchoredMenu } from "../../../components/AndroidAnchoredMenu";
+import { AndroidHeaderIconButton } from "../../../components/AndroidScreenHeader";
 import { ENVIRONMENT_MACHINE_SYMBOLS } from "../../../components/EnvironmentMachineSymbol";
 import { NativeStackScreenOptions } from "../../../native/StackHeader";
 import { withNativeGlassHeaderItem } from "../../layout/native-glass-header-items";
@@ -153,10 +153,7 @@ export function AndroidSettingsEnvironmentFilter() {
       : "line.3.horizontal.decrease.circle.fill";
 
   return (
-    <ControlPillMenu
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel="Filter settings environments and projects"
+    <AndroidAnchoredMenu
       title="Settings scope"
       actions={[
         {
@@ -201,13 +198,13 @@ export function AndroidSettingsEnvironmentFilter() {
         }
       }}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Filter settings environments and projects"
-        className="size-11 items-center justify-center rounded-full"
-      >
-        <SymbolView name={filterIcon} size={22} tintColorClassName="accent-icon" />
-      </Pressable>
-    </ControlPillMenu>
+      {(open) => (
+        <AndroidHeaderIconButton
+          accessibilityLabel="Filter settings environments and projects"
+          icon={filterIcon}
+          onPress={open}
+        />
+      )}
+    </AndroidAnchoredMenu>
   );
 }

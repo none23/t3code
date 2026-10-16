@@ -2,7 +2,6 @@ package expo.modules.t3nativecontrols
 
 import android.content.Context
 import android.view.ViewGroup
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -16,7 +15,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -127,7 +125,7 @@ class T3WorkspaceNavigationView(
         )
         setContent {
           MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
-            val tabs = listOf("threads", "pullRequests")
+            val tabs = listOf("threads", "pullRequests", "usage", "settings")
             if (rail) {
               NavigationRail(
                 modifier = Modifier.fillMaxSize(),
@@ -141,7 +139,12 @@ class T3WorkspaceNavigationView(
                     onClick = { onItemPress(mapOf("item" to tab)) },
                     icon = { itemIcon(tab) },
                     label = {
-                      val title = if (tab == "threads") "Chats" else "PRs"
+                      val title = when (tab) {
+                        "threads" -> "Chats"
+                        "pullRequests" -> "PRs"
+                        "usage" -> "Usage"
+                        else -> "Settings"
+                      }
                       Text(title, fontSize = (12 * textScale).sp)
                     },
                     colors = NavigationRailItemDefaults.colors(
@@ -154,11 +157,6 @@ class T3WorkspaceNavigationView(
                   )
                 }
                 Spacer(Modifier.weight(1f))
-                listOf("usage", "settings").forEach { item ->
-                  IconButton(onClick = { onItemPress(mapOf("item" to item)) }) {
-                    itemIcon(item, Color(unselectedColor), Modifier.size(iconSize.dp))
-                  }
-                }
               }
             } else {
               Surface(
@@ -172,20 +170,15 @@ class T3WorkspaceNavigationView(
                   modifier = Modifier.fillMaxSize().selectableGroup(),
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
-                  (tabs + listOf("usage", "settings")).forEach { item ->
+                  tabs.forEach { item ->
                     val selected = selectedTab == item
                     val onClick = { onItemPress(mapOf("item" to item)) }
-                    val action = if (item in tabs) {
-                      Modifier.selectable(selected = selected, role = Role.Tab, onClick = onClick)
-                    } else {
-                      Modifier.clickable(role = Role.Button, onClick = onClick)
-                    }
                     Box(
                       modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(CircleShape)
-                        .then(action)
+                        .selectable(selected = selected, role = Role.Tab, onClick = onClick)
                         .padding(4.dp)
                         .background(
                           if (selected) Color(indicatorColor) else Color.Transparent,

@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { Platform } from "react-native";
 
 import { ListRow } from "../../../components/ListRow";
+import { useSettingsRootNavigation } from "../useSettingsRootNavigation";
 import type { SettingsLegalDocumentTarget, SettingsSheetTarget } from "./settings-sheet-targets";
 
 export function SettingsRow(props: {
@@ -16,6 +17,7 @@ export function SettingsRow(props: {
   readonly onPress?: () => void;
 }) {
   const navigation = useNavigation();
+  const openSettingsRoot = useSettingsRootNavigation();
   const valueBelow =
     props.valuePosition === "below" ||
     (props.valuePosition === undefined && Platform.OS === "android");
@@ -27,7 +29,9 @@ export function SettingsRow(props: {
       detail={valueBelow ? undefined : props.value}
       disabled={props.disabled}
       onPress={() => {
-        if (props.target) {
+        if (props.target === "SettingsUsage") {
+          openSettingsRoot("usage");
+        } else if (props.target) {
           navigation.navigate("SettingsSheet", {
             screen: "SettingsContent",
             params: { screen: props.target },
