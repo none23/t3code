@@ -74,7 +74,7 @@ export function MaterialThreadListToolbar(props: {
 
   const filterIcon = props.filterCustomized
     ? "line.3.horizontal.decrease.circle.fill"
-    : "line.3.horizontal.decrease.circle";
+    : "line.3.horizontal.decrease";
   const searchField = (
     <MaterialSearchField
       inputRef={searchRef}
@@ -111,17 +111,17 @@ export function MaterialThreadListToolbar(props: {
               onPress={openSearch}
             />
           ) : null}
-          {state.hasConnections ? (
-            <AndroidAnchoredMenu actions={props.filterActions} onPressAction={props.onFilterAction}>
-              {(open) => (
-                <AndroidHeaderIconButton
-                  accessibilityLabel="Filter threads"
-                  icon={filterIcon}
-                  onPress={open}
-                />
-              )}
-            </AndroidAnchoredMenu>
-          ) : null}
+          <AndroidAnchoredMenu actions={props.filterActions} onPressAction={props.onFilterAction}>
+            {(open) => (
+              <AndroidHeaderIconButton
+                accessibilityLabel="Filter threads"
+                icon={filterIcon}
+                disabled={!state.hasConnections}
+                selected={props.filterCustomized}
+                onPress={open}
+              />
+            )}
+          </AndroidAnchoredMenu>
         </>
       }
     />
