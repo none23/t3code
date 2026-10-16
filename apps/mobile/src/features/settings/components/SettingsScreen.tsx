@@ -10,7 +10,7 @@ import { AndroidWorkspaceHeader } from "../../workspace/AndroidWorkspaceHeader";
 export { SettingsScreenContent };
 
 export function SettingsScreen(
-  props: Pick<ScreenHeaderProps, "title" | "actions" | "trailing"> & {
+  props: Pick<ScreenHeaderProps, "title" | "actions" | "trailing" | "search"> & {
     readonly children: ReactNode;
     /** A native form sheet already owns its rounded outer frame. */
     readonly formSheet?: boolean;
@@ -22,11 +22,16 @@ export function SettingsScreen(
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
       {props.workspaceRoot && Platform.OS === "android" ? (
-        <AndroidWorkspaceHeader title={props.title} trailing={props.trailing} />
+        <AndroidWorkspaceHeader
+          title={props.title}
+          search={props.search}
+          trailing={props.trailing}
+        />
       ) : (
         <ScreenHeader
           title={props.title}
           actions={props.actions}
+          search={props.search}
           trailing={Platform.OS === "android" ? props.trailing : undefined}
           sidebar={false}
           onBack={() => navigation.goBack()}
