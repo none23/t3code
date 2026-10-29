@@ -3605,11 +3605,11 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         yield* start("/unrestricted");
         assert.equal(harness.getOpenedOptions()?.permissionMode, "bypassPermissions");
         assert.equal(harness.getOpenedOptions()?.allowDangerouslySkipPermissions, true);
-        // Forwarded asks (including ask rules and settings fallback) still need a decision
-        // before queued init/status frames arrive.
-        for (const { phase, frame } of [
+        for (const { phase, frame, autoApprove } of [
+          { phase: "before-init", frame: undefined, autoApprove: true },
           {
             phase: "init",
+            autoApprove: true,
             frame: claudeSdkFrame({
               type: "system",
               subtype: "init",
@@ -3618,8 +3618,10 @@ describe("ClaudeAdapterV2 background wake turns", () => {
               session_id: WAKE_NATIVE_SESSION,
             }),
           },
+          { phase: "ask-rule", frame: undefined, autoApprove: true },
           {
             phase: "status",
+            autoApprove: false,
             frame: claudeSdkFrame({
               type: "system",
               subtype: "status",
@@ -3630,16 +3632,27 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             }),
           },
         ]) {
+          if (frame !== undefined) yield* harness.offerAndWait(frame);
+          const toolInput = { command: 'rm -rf -- "$build_dir"/*' };
+          const toolUseID = `forwarded-${phase}`;
           const forwardedDecision = yield* Effect.promise(() =>
-            harness.getOpenedOptions()!.canUseTool!(
-              "Bash",
-              { command: "git status" },
-              {
-                signal: new AbortController().signal,
-                toolUseID: `forwarded-before-${phase}`,
-                requestId: `request-forwarded-before-${phase}`,
-              },
-            ),
+            harness.getOpenedOptions()!.canUseTool!("Bash", toolInput, {
+              signal: new AbortController().signal,
+              toolUseID,
+              requestId: `request-forwarded-${phase}`,
+              ...(phase === "ask-rule"
+                ? {
+                    matchedAskRule: {
+                      source: "userSettings",
+                      toolName: "Bash",
+                      ruleContent: "rm:*",
+                    },
+                  }
+                : {
+                    decisionReason: "Dangerous rm operation on statically-unresolvable target",
+                    suppressAlwaysAllowRule: true,
+                  }),
+            }),
           ).pipe(Effect.forkScoped);
           const forwardedFirst = yield* Effect.raceFirst(
             Queue.take(harness.runtimeRequestReceipts).pipe(
@@ -3651,17 +3664,23 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           );
           assert.equal(
             forwardedFirst.type,
-            "request",
-            `CLI-forwarded Bash must ask before the queued ${phase} frame reaches the adapter`,
+            autoApprove ? "decision" : "request",
+            `Full access must follow the effective permission mode at ${phase}`,
           );
-          if (forwardedFirst.type !== "request") return;
-          assert.equal(forwardedFirst.event.runtimeRequest.kind, "command");
-          yield* harness.runtime.respondToRuntimeRequest({
-            requestId: forwardedFirst.event.runtimeRequest.id,
-            decision: "decline",
-          });
-          assert.equal((yield* Fiber.join(forwardedDecision))?.behavior, "deny");
-          yield* harness.offerAndWait(frame);
+          if (forwardedFirst.type === "decision") {
+            assert.deepEqual(forwardedFirst.result, {
+              behavior: "allow",
+              updatedInput: toolInput,
+              toolUseID,
+            });
+          } else {
+            assert.equal(forwardedFirst.event.runtimeRequest.kind, "command");
+            yield* harness.runtime.respondToRuntimeRequest({
+              requestId: forwardedFirst.event.runtimeRequest.id,
+              decision: "decline",
+            });
+            assert.equal((yield* Fiber.join(forwardedDecision))?.behavior, "deny");
+          }
         }
         yield* finish;
         const unrestrictedOptions = harness.getOpenedOptions();
@@ -4265,6 +4284,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           attemptId: RunAttemptId.make("mcp-presentation"),
           text: "Check the weather",
           attachments: [],
+          runtimePolicy: { ...CLAUDE_TEST_RUNTIME_POLICY, runtimeMode: "approval-required" },
         }),
       );
       const toolName = "mcp__weather__get_weather";
