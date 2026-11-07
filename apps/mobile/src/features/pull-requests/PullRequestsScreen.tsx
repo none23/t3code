@@ -5,7 +5,12 @@ import {
   parsePullRequestQuery,
 } from "@t3tools/client-runtime/pull-request-query";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import type { LegendListRef } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
+import {
+  useAndroidScrollHeader,
+  useAndroidScrollHeaderListRef,
+} from "../../components/ui/AndroidScrollHeader";
 import { useNavigation } from "@react-navigation/native";
 import { use, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -104,6 +109,8 @@ export function PullRequestsScreen(
   const bottomSafeArea =
     Platform.OS === "ios" ? (columnSafeBottom ?? insets.bottom) : insets.bottom;
   const listRef = useRef<LegendListRef>(null);
+  const scrollHeader = useAndroidScrollHeader();
+  const scrollHeaderListRef = useAndroidScrollHeaderListRef(listRef);
   const tab = workspace.state.tabs.pullRequests;
   const [initialScrollOffset] = useState(() => workspace.getScrollOffset("pullRequests"));
   useSearchScrollRestoration(tab.searchMode, () => {
@@ -269,8 +276,9 @@ export function PullRequestsScreen(
   );
   const list = (
     <View className={sidebar ? "flex-1 bg-drawer" : "flex-1 bg-screen"}>
-      <LegendList
-        ref={listRef}
+      <AnimatedLegendList
+        ref={scrollHeaderListRef}
+        sharedValues={scrollHeader ? { scrollOffset: scrollHeader.scrollY } : undefined}
         data={entries}
         extraData={`${selectedKey}:${busyKey}`}
         keyExtractor={pullRequestKey}
@@ -286,7 +294,7 @@ export function PullRequestsScreen(
             refreshing={result.refreshing}
             onRefresh={() => void result.onRefresh()}
             // The list already accounts for the navigation header in its content inset.
-            progressViewOffset={Platform.OS === "ios" ? 60 : undefined}
+            progressViewOffset={Platform.OS === "ios" ? 60 : scrollHeader?.inset}
           />
         }
         alwaysBounceVertical
@@ -305,6 +313,7 @@ export function PullRequestsScreen(
         }
         contentInsetStartAdjustment={contentTopInset}
         contentContainerStyle={{
+          paddingTop: scrollHeader?.inset,
           paddingBottom:
             Math.max(bottomSafeArea, workspace.bottomClearance) -
             (Platform.OS === "ios" ? bottomSafeArea : 0),

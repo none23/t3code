@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Platform, View, type LayoutChangeEvent } from "react-native";
 
 import { useAdaptiveWorkspaceLayout } from "../../features/layout/adaptive-workspace-context";
+import { useAndroidScrollHeader } from "./AndroidScrollHeader";
 
 const SURFACE_CLASS_NAMES = {
   sheet: "bg-sheet-solid",
@@ -29,6 +30,7 @@ export function ScreenContent({
   readonly onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const { layout } = useAdaptiveWorkspaceLayout();
+  const scrollHeader = useAndroidScrollHeader();
   if (Platform.OS !== "android") {
     return onLayout ? (
       <View className="flex-1" onLayout={onLayout}>
@@ -36,6 +38,15 @@ export function ScreenContent({
       </View>
     ) : (
       children
+    );
+  }
+
+  // Under a One UI floating header the screen is one surface, as in One UI's own apps.
+  if (scrollHeader) {
+    return (
+      <View className="flex-1 bg-screen" onLayout={onLayout}>
+        {children}
+      </View>
     );
   }
 

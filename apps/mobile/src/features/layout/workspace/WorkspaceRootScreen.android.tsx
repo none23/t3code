@@ -21,6 +21,7 @@ import { FLOATING_TABS } from "./floating-workspace-tabs";
 import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
 import { WorkspaceTabPanes } from "./WorkspaceTabPanes";
 import { WorkspaceAppBarScope } from "../../../components/ui/WorkspaceAppBar.android";
+import { AndroidScrollHeaderProvider } from "../../../components/ui/AndroidScrollHeader";
 import { usePaneRole } from "../../../components/ui/Pane";
 import { AndroidWorkspaceSidebar } from "./AndroidWorkspaceSidebar.android";
 import type { WorkspaceTab } from "./workspace-tabs-state";
@@ -74,34 +75,37 @@ function WorkspaceRoot() {
               <WorkspaceNoTabs />
             )
           ) : (
-            <WorkspaceAppBarScope enabled={!layout.usesSplitView}>
+            // One UI tabs float their own headers over their lists instead of sharing one bar.
+            <WorkspaceAppBarScope enabled={!layout.usesSplitView && !floatingTabsEnabled}>
               <WorkspaceTabPanes
                 tabs={TABS}
                 selected={tab}
-                renderTab={(tab) =>
-                  tab === "threads" ? (
-                    <HomeRouteScreen />
-                  ) : tab !== "pullRequests" ? (
-                    <WorkspacePageFrame width={workspacePageWidth ?? null}>
-                      <WorkspaceExtraTab tab={tab} />
-                    </WorkspacePageFrame>
-                  ) : layout.usesSplitView ? (
-                    <>
-                      <NativeStackScreenOptions options={{ headerShown: false }} />
-                      <AppBar embedded title="Pull requests" />
-                      <WorkspaceEmptyDetail tab="pullRequests" />
-                    </>
-                  ) : (
-                    <PullRequestsScreen
-                      renderFrame={(filters, list) => (
-                        <>
-                          <PullRequestToolbar filters={filters} />
-                          <ScreenContent>{list}</ScreenContent>
-                        </>
-                      )}
-                    />
-                  )
-                }
+                renderTab={(tab) => (
+                  <AndroidScrollHeaderProvider enabled={!layout.usesSplitView}>
+                    {tab === "threads" ? (
+                      <HomeRouteScreen />
+                    ) : tab !== "pullRequests" ? (
+                      <WorkspacePageFrame width={workspacePageWidth ?? null}>
+                        <WorkspaceExtraTab tab={tab} />
+                      </WorkspacePageFrame>
+                    ) : layout.usesSplitView ? (
+                      <>
+                        <NativeStackScreenOptions options={{ headerShown: false }} />
+                        <AppBar embedded title="Pull requests" />
+                        <WorkspaceEmptyDetail tab="pullRequests" />
+                      </>
+                    ) : (
+                      <PullRequestsScreen
+                        renderFrame={(filters, list) => (
+                          <>
+                            <PullRequestToolbar filters={filters} />
+                            <ScreenContent>{list}</ScreenContent>
+                          </>
+                        )}
+                      />
+                    )}
+                  </AndroidScrollHeaderProvider>
+                )}
               />
             </WorkspaceAppBarScope>
           )}

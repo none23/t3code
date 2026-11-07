@@ -2,6 +2,7 @@ import { createContext, use, type ComponentProps } from "react";
 import { Platform } from "react-native";
 import { cn } from "../../lib/cn";
 import { NativeScrollView as ScrollView } from "../../native/NativeScrollViewMarker";
+import { AndroidScrollHeaderScrollView, useAndroidScrollHeader } from "./AndroidScrollHeader";
 
 export const ScreenScrollViewBottomInset = createContext(0);
 /**
@@ -13,8 +14,10 @@ export const ScreenScrollViewSurface = createContext<string | undefined>(undefin
 export function ScreenScrollView(props: ComponentProps<typeof ScrollView>) {
   const bottomInset = use(ScreenScrollViewBottomInset);
   const surface = use(ScreenScrollViewSurface);
+  const header = useAndroidScrollHeader();
+  const Component = header && !props.horizontal ? AndroidScrollHeaderScrollView : ScrollView;
   return (
-    <ScrollView
+    <Component
       {...props}
       className={Platform.OS === "ios" && surface ? cn(surface, props.className) : props.className}
       contentInset={

@@ -13,6 +13,7 @@ import { rememberedSettingsPage } from "../layout/workspace/workspace-tab-naviga
 import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
 import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { AndroidScrollHeaderProvider } from "../../components/ui/AndroidScrollHeader";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useAuth, useUser } from "@clerk/expo";
 import { useNavigation, useNavigationState } from "@react-navigation/native";
@@ -78,23 +79,25 @@ export function SettingsListScreen(props: {
   return (
     <SettingsSidebarContext value={props.sidebar ? { selected: props.selected } : null}>
       <View className="flex-1 bg-screen">
-        <SettingsScreen
-          title="Settings"
-          workspaceRoot={props.sidebar}
-          menus={[environmentMenu]}
-          search={
-            workspace
-              ? {
-                  value: workspace.state.tabs.settings.query,
-                  onChangeText: (query) =>
-                    workspace.dispatch({ type: "query", tab: "settings", query }),
-                  placeholder: "Search settings",
-                }
-              : undefined
-          }
-        >
-          <SettingsListContent />
-        </SettingsScreen>
+        <AndroidScrollHeaderProvider enabled={!props.sidebar}>
+          <SettingsScreen
+            title="Settings"
+            workspaceRoot={props.sidebar}
+            menus={[environmentMenu]}
+            search={
+              workspace
+                ? {
+                    value: workspace.state.tabs.settings.query,
+                    onChangeText: (query) =>
+                      workspace.dispatch({ type: "query", tab: "settings", query }),
+                    placeholder: "Search settings",
+                  }
+                : undefined
+            }
+          >
+            <SettingsListContent />
+          </SettingsScreen>
+        </AndroidScrollHeaderProvider>
       </View>
     </SettingsSidebarContext>
   );

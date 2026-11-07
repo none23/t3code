@@ -55,10 +55,6 @@ export function AndroidScreenHeader(props: {
   const inFormSheet = use(RoutedFormSheetContext);
   const { paddingTop, paddingBottom } = useToolbarLayout(props.embedded || inFormSheet);
   const [headerWidth, setHeaderWidth] = useState(0);
-  const { visibleActions, overflowActions } = splitAndroidHeaderActions(
-    props.actions ?? [],
-    headerWidth >= 600,
-  );
 
   return (
     <View
@@ -152,59 +148,76 @@ export function AndroidScreenHeader(props: {
           )
         }
         actions={
-          visibleActions.length > 0 || overflowActions.length > 0 || props.trailing ? (
-            <View collapsable={false} className="flex-row items-center">
-              {visibleActions.map((action) =>
-                action.loading ? (
-                  <View
-                    key={action.accessibilityLabel}
-                    accessibilityLabel={action.accessibilityLabel}
-                    className="size-12 items-center justify-center"
-                  >
-                    <AppActivityIndicator colorClassName="accent-header-foreground" />
-                  </View>
-                ) : (
-                  <AndroidHeaderIconButton
-                    key={action.accessibilityLabel}
-                    accessibilityLabel={action.accessibilityLabel}
-                    disabled={action.disabled}
-                    selected={action.selected}
-                    icon={action.icon}
-                    onPress={action.onPress}
-                  />
-                ),
-              )}
-              {overflowActions.length > 0 ? (
-                <AndroidAnchoredMenu
-                  actions={overflowActions.map((action, index) => ({
-                    id: String(index),
-                    title: action.accessibilityLabel,
-                    subtitle: action.subtitle,
-                    state: action.selected ? "on" : undefined,
-                    attributes: {
-                      disabled: Boolean(action.disabled),
-                      destructive: action.destructive,
-                    },
-                  }))}
-                  onPressAction={({ nativeEvent }) =>
-                    overflowActions[Number(nativeEvent.event)]?.onPress()
-                  }
-                >
-                  {(open) => (
-                    <IconButton
-                      accessibilityLabel="More actions"
-                      icon="ellipsis"
-                      tintColorClassName="accent-header-foreground"
-                      onPress={open}
-                    />
-                  )}
-                </AndroidAnchoredMenu>
-              ) : null}
-              {props.trailing}
-            </View>
+          props.actions?.length || props.trailing ? (
+            <AndroidHeaderActions
+              actions={props.actions}
+              trailing={props.trailing}
+              wide={headerWidth >= 600}
+            />
           ) : undefined
         }
       />
+    </View>
+  );
+}
+
+/** A header's trailing buttons; those that don't fit go to an overflow menu. */
+export function AndroidHeaderActions(props: {
+  readonly actions?: ReadonlyArray<AndroidHeaderAction>;
+  readonly trailing?: ReactNode;
+  readonly wide: boolean;
+}) {
+  const { visibleActions, overflowActions } = splitAndroidHeaderActions(
+    props.actions ?? [],
+    props.wide,
+  );
+  return (
+    <View collapsable={false} className="flex-row items-center">
+      {visibleActions.map((action) =>
+        action.loading ? (
+          <View
+            key={action.accessibilityLabel}
+            accessibilityLabel={action.accessibilityLabel}
+            className="size-12 items-center justify-center"
+          >
+            <AppActivityIndicator colorClassName="accent-header-foreground" />
+          </View>
+        ) : (
+          <AndroidHeaderIconButton
+            key={action.accessibilityLabel}
+            accessibilityLabel={action.accessibilityLabel}
+            disabled={action.disabled}
+            selected={action.selected}
+            icon={action.icon}
+            onPress={action.onPress}
+          />
+        ),
+      )}
+      {overflowActions.length > 0 ? (
+        <AndroidAnchoredMenu
+          actions={overflowActions.map((action, index) => ({
+            id: String(index),
+            title: action.accessibilityLabel,
+            subtitle: action.subtitle,
+            state: action.selected ? "on" : undefined,
+            attributes: {
+              disabled: Boolean(action.disabled),
+              destructive: action.destructive,
+            },
+          }))}
+          onPressAction={({ nativeEvent }) => overflowActions[Number(nativeEvent.event)]?.onPress()}
+        >
+          {(open) => (
+            <IconButton
+              accessibilityLabel="More actions"
+              icon="ellipsis"
+              tintColorClassName="accent-header-foreground"
+              onPress={open}
+            />
+          )}
+        </AndroidAnchoredMenu>
+      ) : null}
+      {props.trailing}
     </View>
   );
 }

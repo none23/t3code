@@ -1,5 +1,5 @@
 import { type RefObject, use, useRef, useState } from "react";
-import { Keyboard, type TextInputInstance, View } from "react-native";
+import { Keyboard, type TextInputInstance, View, useWindowDimensions } from "react-native";
 import { useHardwareBack } from "../../lib/backHandler";
 import { useToolbarLayout } from "./useToolbarLayout";
 import { RoutedFormSheetContext } from "./RoutedFormSheetContext";
@@ -8,7 +8,11 @@ import { useSidebarToggle } from "../../features/layout/useSidebarToggle";
 import { useAdaptiveWorkspaceLayout } from "../../features/layout/adaptive-workspace-context";
 import { InspectorCloseContext } from "../../features/layout/inspector-bar-store";
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
-import { AndroidHeaderIconButton, AndroidScreenHeader } from "./AndroidScreenHeader";
+import {
+  AndroidHeaderActions,
+  AndroidHeaderIconButton,
+  AndroidScreenHeader,
+} from "./AndroidScreenHeader";
 import { ScreenHeaderButton } from "./ScreenHeaderButton.android";
 import { Menu } from "./Menu";
 import { Button } from "./Button";
@@ -16,6 +20,8 @@ import { SearchField } from "./SearchField";
 import { androidHeaderMenuActions, findHeaderMenuAction } from "./headerMenu.android";
 import type { AppBarMenuItem, AppBarProps, AppBarSearch } from "./AppBar.types";
 import { useHasWorkspaceAppBar, WorkspaceAppBar } from "./WorkspaceAppBar.android";
+import { AndroidFloatingHeader, useAndroidScrollHeader } from "./AndroidScrollHeader";
+import { AppText } from "./AppText";
 
 function selectMenuItem(items: ReadonlyArray<AppBarMenuItem>, id: string) {
   const action = findHeaderMenuAction(items, id);
@@ -80,6 +86,8 @@ function AppBarView(props: AppBarProps & { readonly searchState?: SearchState })
   const { paddingTop, paddingBottom } = useToolbarLayout(props.sheet || inFormSheet);
   const { themeVariables } = useAppearancePreferences();
   const inWorkspace = useHasWorkspaceAppBar();
+  const scrollHeader = useAndroidScrollHeader();
+  const { width: windowWidth } = useWindowDimensions();
   const sidebarToggle = useSidebarToggle();
   const closeInspector = use(InspectorCloseContext);
   const inline = search?.mode === "inline";
@@ -176,6 +184,92 @@ function AppBarView(props: AppBarProps & { readonly searchState?: SearchState })
         optionsVersion={props.optionsVersion}
       />
     );
+  const headerActions =
+    search && !inline
+      ? [
+          {
+            accessibilityLabel: searchLabel,
+            icon: "magnifyingglass" as const,
+            onPress: openSearch,
+          },
+          ...(actions ?? []),
+        ]
+      : actions;
+  const trailing =
+    menuView?.length || props.trailing || props.confirm || closeInspector ? (
+      <>
+        {menuView}
+        {props.trailing}
+        {confirmButton}
+        {closeInspector ? (
+          <AndroidHeaderIconButton
+            accessibilityLabel="Close inspector"
+            icon="xmark"
+            onPress={closeInspector}
+          />
+        ) : null}
+      </>
+    ) : undefined;
+  const searchRow =
+    search && searching ? (
+      <>
+        {inline ? (
+          props.onClose ? (
+            <ScreenHeaderButton
+              accessibilityLabel={props.closeAccessibilityLabel ?? "Close"}
+              icon="xmark"
+              onPress={props.onClose}
+            />
+          ) : props.onBack ? (
+            <ScreenHeaderButton
+              accessibilityLabel="Navigate up"
+              icon="arrow.left"
+              onPress={props.onBack}
+            />
+          ) : null
+        ) : (
+          <ScreenHeaderButton
+            accessibilityLabel={search.closeAccessibilityLabel ?? "Close search"}
+            icon="arrow.left"
+            onPress={closeSearch}
+          />
+        )}
+        {searchField}
+        {inline ? menuView : null}
+        {inline ? confirmButton : null}
+      </>
+    ) : null;
+  // A top-level One UI screen: no way back, so nothing but the title and its actions.
+  if (scrollHeader && !props.sheet && !inFormSheet && !props.onBack && !props.onClose) {
+    return (
+      <>
+        {options}
+        <AndroidFloatingHeader
+          title={
+            props.titleContent ?? (
+              <AppText
+                textRole="largeTitle"
+                numberOfLines={1}
+                className="font-t3-bold text-header-foreground"
+              >
+                {props.title}
+              </AppText>
+            )
+          }
+          actions={
+            headerActions?.length || trailing ? (
+              <AndroidHeaderActions
+                actions={headerActions}
+                trailing={trailing}
+                wide={windowWidth >= 600}
+              />
+            ) : undefined
+          }
+          search={searchRow}
+        />
+      </>
+    );
+  }
   const header = (
     <AndroidScreenHeader
       title={props.title}
@@ -203,34 +297,8 @@ function AppBarView(props: AppBarProps & { readonly searchState?: SearchState })
       embedded={props.sheet}
       hideBottomBorder={props.hideBottomBorder}
       compact={props.compact}
-      actions={
-        search && !inline
-          ? [
-              {
-                accessibilityLabel: searchLabel,
-                icon: "magnifyingglass",
-                onPress: openSearch,
-              },
-              ...(actions ?? []),
-            ]
-          : actions
-      }
-      trailing={
-        menuView?.length || props.trailing || props.confirm || closeInspector ? (
-          <>
-            {menuView}
-            {props.trailing}
-            {confirmButton}
-            {closeInspector ? (
-              <AndroidHeaderIconButton
-                accessibilityLabel="Close inspector"
-                icon="xmark"
-                onPress={closeInspector}
-              />
-            ) : null}
-          </>
-        ) : undefined
-      }
+      actions={headerActions}
+      trailing={trailing}
     />
   );
   if (!search) {
@@ -259,32 +327,7 @@ function AppBarView(props: AppBarProps & { readonly searchState?: SearchState })
             // Match Material TopAppBar's 4dp icon inset so buttons stay where the bar drew them.
             style={{ paddingTop, paddingBottom, paddingHorizontal: 4 }}
           >
-            <View className="flex-1 flex-row items-center gap-1">
-              {inline ? (
-                props.onClose ? (
-                  <ScreenHeaderButton
-                    accessibilityLabel={props.closeAccessibilityLabel ?? "Close"}
-                    icon="xmark"
-                    onPress={props.onClose}
-                  />
-                ) : props.onBack ? (
-                  <ScreenHeaderButton
-                    accessibilityLabel="Navigate up"
-                    icon="arrow.left"
-                    onPress={props.onBack}
-                  />
-                ) : null
-              ) : (
-                <ScreenHeaderButton
-                  accessibilityLabel={search.closeAccessibilityLabel ?? "Close search"}
-                  icon="arrow.left"
-                  onPress={closeSearch}
-                />
-              )}
-              {searchField}
-              {inline ? menuView : null}
-              {inline ? confirmButton : null}
-            </View>
+            <View className="flex-1 flex-row items-center gap-1">{searchRow}</View>
           </View>
         ) : null}
       </View>

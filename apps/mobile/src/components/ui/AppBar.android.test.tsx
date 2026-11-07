@@ -6,6 +6,7 @@ vi.mock("react-native", () => ({
   View: (props: { readonly children?: ReactNode }) => <div>{props.children}</div>,
   Keyboard: { dismiss: () => {} },
   BackHandler: { addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 400, height: 800 }),
 }));
 // React Navigation throws this outside a navigator, as for the Arrange threads sheet.
 vi.mock("@react-navigation/native", () => ({
@@ -16,6 +17,11 @@ vi.mock("@react-navigation/native", () => ({
 vi.mock("./AndroidScreenHeader", () => ({
   AndroidScreenHeader: (props: { readonly title: string }) => <h1>{props.title}</h1>,
 }));
+vi.mock("./AndroidScrollHeader", () => ({
+  useAndroidScrollHeader: () => null,
+  AndroidFloatingHeader: () => null,
+}));
+vi.mock("./AppText", () => ({ AppText: () => null }));
 vi.mock("./WorkspaceAppBar.android", () => ({
   useHasWorkspaceAppBar: () => false,
   WorkspaceAppBar: () => null,

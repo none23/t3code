@@ -1,5 +1,9 @@
 import { usePaneRole } from "../../components/ui/Pane";
 import { ScreenContent } from "../../components/ui/ScreenContent";
+import {
+  useAndroidScrollHeader,
+  useAndroidScrollHeaderListRef,
+} from "../../components/ui/AndroidScrollHeader";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
@@ -321,6 +325,8 @@ export function HomeScreen(props: HomeScreenProps) {
   };
   const onFabScroll = useFabScroll();
   const listRef = useRef<LegendListRef>(null);
+  const scrollHeader = useAndroidScrollHeader();
+  const scrollHeaderListRef = useAndroidScrollHeaderListRef(listRef);
   const searchMode = workspace?.state.tabs.threads.searchMode;
   const restoredOffset = workspace?.state.tabs.threads.scrollOffset;
   useSearchScrollRestoration(searchMode, () => {
@@ -683,7 +689,7 @@ export function HomeScreen(props: HomeScreenProps) {
             style={{
               paddingBottom:
                 Platform.OS === "ios" ? iosBottomClearance : Math.max(insets.bottom, 24),
-              paddingTop: emptyTopInset,
+              paddingTop: emptyTopInset + (scrollHeader?.inset ?? 0),
               paddingLeft: 32 + (contentSideInsets?.left ?? 0),
               paddingRight: 32 + (contentSideInsets?.right ?? 0),
             }}
@@ -793,7 +799,8 @@ export function HomeScreen(props: HomeScreenProps) {
             <GestureDetector gesture={homeScrollGesture}>
               <AnimatedLegendList
                 itemLayoutAnimation={sidebarSurface ? THREAD_SIDEBAR_ROW_LAYOUT : undefined}
-                ref={listRef}
+                ref={scrollHeaderListRef}
+                sharedValues={scrollHeader ? { scrollOffset: scrollHeader.scrollY } : undefined}
                 onLoad={() => activateVisibleRows(threadListV2Items)}
                 onTouchStart={(event) => trackListTouches(event, true)}
                 onTouchEnd={(event) => trackListTouches(event, false)}
@@ -847,6 +854,7 @@ export function HomeScreen(props: HomeScreenProps) {
                 {...scrollGateHandlers}
                 scrollEventThrottle={16}
                 contentContainerStyle={{
+                  paddingTop: scrollHeader?.inset,
                   paddingLeft:
                     (contentSideInsets?.left ?? 0) + (sidebarSurface ? 8 : 0) + androidListGutter,
                   paddingRight:
