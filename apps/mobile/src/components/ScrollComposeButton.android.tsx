@@ -3,14 +3,19 @@ import { Box, ExtendedFloatingActionButton, Icon, Text } from "@expo/ui/jetpack-
 import {
   defaultMinSize,
   fillMaxWidth,
+  graphicsLayer,
   height,
+  Shapes,
   onSizeChanged,
   size,
 } from "@expo/ui/jetpack-compose/modifiers";
 import { useState } from "react";
 import { I18nManager, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
-import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
+import {
+  useAndroidFloatingTabs,
+  useAppearancePreferences,
+} from "../features/settings/appearance/AppearancePreferencesProvider";
 import { resolveScaledTextRole } from "../lib/appearancePreferences";
 
 /** Keep the animated width and icon positioning entirely inside Compose, not Yoga. */
@@ -28,6 +33,8 @@ export function ScrollComposeButton(props: {
   const nativeSize = Math.max(56, fabSize);
   const scale = fabSize / nativeSize;
   const nativeIconSize = Math.round(iconSize / scale);
+  // One UI's FAB is a circle, like the floating tabs beside it; Material keeps its rounded square.
+  const round = useAndroidFloatingTabs();
   const [buttonWidth, setButtonWidth] = useState(nativeSize);
   const rememberWidth = ({ width }: { width: number }) => {
     setButtonWidth((previous) => Math.max(previous, width));
@@ -59,6 +66,9 @@ export function ScrollComposeButton(props: {
                 defaultMinSize({ minWidth: nativeSize }),
                 height(nativeSize),
                 onSizeChanged(rememberWidth),
+                ...(round
+                  ? [graphicsLayer({ shape: Shapes.Circle, clip: true, shadowElevation: 6 })]
+                  : []),
               ]}
             >
               <ExtendedFloatingActionButton.Icon>
@@ -98,7 +108,7 @@ export function ScrollComposeButton(props: {
           top: 0,
           bottom: 0,
           width: props.expanded ? buttonWidth * scale : fabSize,
-          borderRadius: 16 * scale,
+          borderRadius: round ? fabSize / 2 : 16 * scale,
           overflow: "hidden",
         }}
       />
