@@ -208,6 +208,11 @@ Use the composer's microphone to record, then confirm to transcribe. Text is
 inserted where your selection was when recording started, ready for you to review
 and edit before sending.
 
+To use your keyboard's dictation or an external voice-to-text tool instead, turn off
+**Settings → Voice → Built-in voice input**. This hides T3 Code's microphone controls
+on this device and cancels any active dictation. Turn it back on to restore your
+previous transcription and microphone choices.
+
 By default, audio stays on the phone. Local transcription needs a supported iPhone
 with iOS 26 or later, or Android 12 or later with compatible Google speech services.
 To use a paired environment instead, open **Settings → Voice → Transcribe on**,

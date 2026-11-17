@@ -106,16 +106,23 @@ describe("mobile connection storage", () => {
     vi.clearAllMocks();
   });
 
-  it("persists tab order locally and retains it when another preference changes", async () => {
+  it("persists device preferences and retains them when another preference changes", async () => {
     const navigationTabOrder = ["usage", "threads", "pullRequests"];
     const hiddenNavigationTabs = ["issues", "home"];
-    await savePreferencesPatch({ navigationTabOrder, hiddenNavigationTabs });
+    await savePreferencesPatch({
+      navigationTabOrder,
+      hiddenNavigationTabs,
+      voiceInputEnabled: false,
+    });
     await savePreferencesPatch({ baseFontSize: 19 });
     await expect(loadPreferences()).resolves.toEqual({
       navigationTabOrder,
       hiddenNavigationTabs,
       baseFontSize: 19,
+      voiceInputEnabled: false,
     });
+    await savePreferencesPatch({ voiceInputEnabled: true });
+    await expect(loadPreferences()).resolves.toMatchObject({ voiceInputEnabled: true });
   });
 
   it("ignores invalid tab-order entries without dropping other saved preferences", async () => {
@@ -124,6 +131,7 @@ describe("mobile connection storage", () => {
         navigationTabOrder: ["usage", null, 4, "threads"],
         hiddenNavigationTabs: ["home", null],
         baseFontSize: 18,
+        voiceInputEnabled: "false",
       }),
       1,
     );

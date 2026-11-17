@@ -64,7 +64,14 @@ export const localVoiceTranscriberAtom = makePermissionStatusAtom<
   read: () => getLocalVoiceTranscriber().catch(() => null),
 }).pipe(Atom.keepAlive);
 
+export const voiceInputEnabledAtom = Atom.make((get) => {
+  const preferences = get(mobilePreferencesAtom);
+  return AsyncResult.isSuccess(preferences) && preferences.value.voiceInputEnabled !== false;
+});
+
 const voiceInputAvailableAtom = Atom.make((get) => {
+  if (!get(voiceInputEnabledAtom)) return false;
+  if (getNativeShowcaseScene() !== null) return true;
   const route = get(voiceRouteAtom);
   if (route) return route.transcriber !== null;
   const transcriber = get(localVoiceTranscriberAtom);
@@ -121,6 +128,7 @@ const voiceInputAtom = Atom.make((get) => {
   const session: VoiceInputSession = new VoiceInputSession({
     recorder,
     getTranscriber: () => {
+      if (!registry.get(voiceInputEnabledAtom)) return null;
       const route = registry.get(voiceRouteAtom);
       if (route) return route.transcriber;
       const transcriber = registry.get(localVoiceTranscriberAtom);
@@ -152,6 +160,9 @@ const voiceInputAtom = Atom.make((get) => {
     keepAwake: () => keepScreenAwake(`voice-input:${++keepAwakeSequence}`),
   });
   get.subscribe(voiceRouteAtom, () => session.controller.cancel());
+  get.subscribe(voiceInputEnabledAtom, (enabled) => {
+    if (!enabled) session.controller.cancel();
+  });
   get.addFinalizer(() => {
     permission.dispose();
     session.dispose();
@@ -166,7 +177,7 @@ export function useGlobalVoiceInput() {
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
   return {
     ...snapshot,
-    isAvailable: isTranscriberAvailable || getNativeShowcaseScene() !== null,
+    isAvailable: isTranscriberAvailable,
     audioLevels,
     isBusy: voiceInputBlocksSubmission(snapshot.state),
     session,

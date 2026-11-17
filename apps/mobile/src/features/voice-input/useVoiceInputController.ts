@@ -45,7 +45,7 @@ export function useVoiceInputController(input: {
 
   const start = useCallback(() => {
     const captured = latestInput.current;
-    if (!captured.ownerKey || captured.disabled) return;
+    if (!global.isAvailable || !captured.ownerKey || captured.disabled) return;
     void session.start({
       ...createVoiceInputTarget(
         captured.ownerKey,
@@ -60,7 +60,7 @@ export function useVoiceInputController(input: {
       ),
       label: captured.label,
     });
-  }, [session]);
+  }, [global.isAvailable, session]);
   const state = global.ownerKey === input.ownerKey ? global.state : IDLE_STATE;
   const isBusy = voiceInputBlocksSubmission(state);
   return {

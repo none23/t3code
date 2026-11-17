@@ -38,9 +38,11 @@ import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActi
 import { SettingsDragHandle } from "./components/SettingsDragHandle";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
+import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import {
   deviceMicrophoneOrder,
   localVoiceTranscriberAtom,
+  voiceInputEnabledAtom,
 } from "../voice-input/VoiceInputProvider";
 
 type MicrophonePermission = "checking" | "granted" | "ask" | "denied";
@@ -204,6 +206,37 @@ function EnvironmentMethodSection({
 }
 
 export function SettingsVoiceRouteScreen() {
+  const insets = useSafeAreaInsets();
+  const enabled = useAtomValue(voiceInputEnabledAtom);
+  const preferencesResult = useAtomValue(mobilePreferencesAtom);
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const ready = AsyncResult.isSuccess(preferencesResult) && !preferencesResult.waiting;
+
+  return (
+    <SettingsScreen title="Voice">
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        className="flex-1"
+        contentContainerClassName="gap-3 px-5 pt-4"
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
+      >
+        <SettingsSection>
+          <SettingsSwitchRow
+            label="Built-in voice input"
+            subtitle="Show T3 Code's microphone controls on this device."
+            value={enabled}
+            disabled={!ready}
+            onValueChange={(voiceInputEnabled) => savePreferences({ voiceInputEnabled })}
+          />
+        </SettingsSection>
+        {enabled ? <VoiceInputSettings /> : null}
+      </ScrollView>
+    </SettingsScreen>
+  );
+}
+
+function VoiceInputSettings() {
   const transcriber = useAtomValue(localVoiceTranscriberAtom);
   const grant = useAtomValue(voiceGrantAtom);
   const { environments, isReady } = useEnvironments();
@@ -221,7 +254,6 @@ export function SettingsVoiceRouteScreen() {
       environment.serverConfig?.environment.capabilities.cloudVoiceTranscription === true,
   );
   const methodEnvironment = sheetEnvironment ?? grantEnvironment;
-  const insets = useSafeAreaInsets();
   const preferencesResult = useAtomValue(mobilePreferencesAtom);
   const savePreferences = useAtomSet(updateMobilePreferencesAtom);
   const ready = AsyncResult.isSuccess(preferencesResult) && !preferencesResult.waiting;
@@ -268,123 +300,111 @@ export function SettingsVoiceRouteScreen() {
   const dragTo = drag === null ? -1 : dragFrom + dropSteps(dragFrom, drag.translation);
 
   return (
-    <SettingsScreen title="Voice">
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        showsVerticalScrollIndicator={false}
-        className="flex-1"
-        contentContainerClassName="gap-3 px-5 pt-4"
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
-      >
-        <SettingsSection title="Transcribe on">
-          <ListChoiceRow
-            label="This device"
-            description="Audio stays on this device and is transcribed here."
-            selected={!grant && !sheetEnvironment}
-            onPress={() => {
-              setCloudSheet(null);
-              saveDestination(null);
-            }}
-          />
-          {hasEnvironmentVoiceCapture &&
-            environments.map((environment) => (
-              <EnvironmentChoice
-                key={environment.environmentId}
-                environment={environment}
-                selected={
-                  sheetEnvironment
-                    ? sheetEnvironment.environmentId === environment.environmentId
-                    : grant?.destination.environmentId === environment.environmentId
-                }
-                onCloudOnly={() => setCloudSheet(environment.environmentId)}
-              />
-            ))}
-          {isReady && grant && !grantEnvironment ? (
-            <ListChoiceRow
-              label="Previously selected environment"
-              description="No longer paired"
-              separated
-              selected
-              disabled
-              onPress={() => {}}
+    <>
+      <SettingsSection title="Transcribe on">
+        <ListChoiceRow
+          label="This device"
+          description="Audio stays on this device and is transcribed here."
+          selected={!grant && !sheetEnvironment}
+          onPress={() => {
+            setCloudSheet(null);
+            saveDestination(null);
+          }}
+        />
+        {hasEnvironmentVoiceCapture &&
+          environments.map((environment) => (
+            <EnvironmentChoice
+              key={environment.environmentId}
+              environment={environment}
+              selected={
+                sheetEnvironment
+                  ? sheetEnvironment.environmentId === environment.environmentId
+                  : grant?.destination.environmentId === environment.environmentId
+              }
+              onCloudOnly={() => setCloudSheet(environment.environmentId)}
             />
-          ) : null}
-        </SettingsSection>
-        {hasEnvironmentVoiceCapture && methodEnvironment ? (
-          <EnvironmentMethodSection
-            environment={methodEnvironment}
-            grant={grant}
-            cloudOpen={cloudSheet === methodEnvironment.environmentId}
-            onCloudOpenChange={(open) =>
-              setCloudSheet(open ? methodEnvironment.environmentId : null)
-            }
+          ))}
+        {isReady && grant && !grantEnvironment ? (
+          <ListChoiceRow
+            label="Previously selected environment"
+            description="No longer paired"
+            separated
+            selected
+            disabled
+            onPress={() => {}}
           />
         ) : null}
-        {!grant && transcriber === null ? (
-          <Text className="px-2 text-sm text-foreground-muted">{UNAVAILABLE_EXPLANATION}</Text>
-        ) : null}
-        {permission === "ask" || permission === "denied" ? (
-          <>
-            <SettingsSection title="Microphone access">
-              <SettingsActionRow
-                icon="mic"
-                label={permission === "ask" ? "Allow microphone access" : "Open Settings"}
-                onPress={
-                  permission === "ask" ? requestPermission : () => void Linking.openSettings()
-                }
-              />
-            </SettingsSection>
-            <Text className="px-2 text-sm text-foreground-muted">
-              {permission === "ask"
-                ? "Allow microphone access to record and to see your microphones."
-                : "Turn on microphone access for T3 Code in Settings to use voice input."}
-            </Text>
-          </>
-        ) : null}
-        <SettingsSection title="Preferred order">
-          {entries.map((entry, index) => {
-            const key = microphoneEntryKey(entry);
-            const shift =
-              dragFrom === -1 || index === dragFrom
-                ? 0
-                : dragFrom < dragTo && index > dragFrom && index <= dragTo
-                  ? -rowHeight
-                  : dragFrom > dragTo && index < dragFrom && index >= dragTo
-                    ? rowHeight
-                    : 0;
-            return (
-              <MicrophoneRow
-                key={`${key}:${drops}`}
-                entry={entry}
-                position={index + 1}
-                count={entries.length}
-                reorderable={ready}
-                offset={index === dragFrom ? (drag?.translation ?? 0) : shift}
-                lifted={index === dragFrom}
-                onHeight={setRowHeight}
-                onDragStart={() => setDrag({ key, translation: 0 })}
-                onDragMove={(translation) => setDrag({ key, translation })}
-                onDragEnd={(translation, cancelled) => {
-                  setDrag(null);
-                  setDrops((count) => count + 1);
-                  if (!cancelled) move(key, dropSteps(index, translation));
-                }}
-                onStep={(direction) => move(key, direction === "up" ? -1 : 1)}
-                onForget={isMicrophoneDevice(entry) ? () => forget(key) : undefined}
-              />
-            );
-          })}
-        </SettingsSection>
-        <Text className="px-2 text-sm text-foreground-muted">
-          Voice input uses the first connected microphone in this list. A wired or Bluetooth
-          microphone is added by name the first time you dictate with it connected; until then it
-          falls under Other. Swipe left on a named microphone to forget it.
-          {Platform.OS === "android"
-            ? " Android may still use a different microphone if the preferred one can’t be routed."
-            : null}
-        </Text>
-      </ScrollView>
-    </SettingsScreen>
+      </SettingsSection>
+      {hasEnvironmentVoiceCapture && methodEnvironment ? (
+        <EnvironmentMethodSection
+          environment={methodEnvironment}
+          grant={grant}
+          cloudOpen={cloudSheet === methodEnvironment.environmentId}
+          onCloudOpenChange={(open) => setCloudSheet(open ? methodEnvironment.environmentId : null)}
+        />
+      ) : null}
+      {!grant && transcriber === null ? (
+        <Text className="px-2 text-sm text-foreground-muted">{UNAVAILABLE_EXPLANATION}</Text>
+      ) : null}
+      {permission === "ask" || permission === "denied" ? (
+        <>
+          <SettingsSection title="Microphone access">
+            <SettingsActionRow
+              icon="mic"
+              label={permission === "ask" ? "Allow microphone access" : "Open Settings"}
+              onPress={permission === "ask" ? requestPermission : () => void Linking.openSettings()}
+            />
+          </SettingsSection>
+          <Text className="px-2 text-sm text-foreground-muted">
+            {permission === "ask"
+              ? "Allow microphone access to record and to see your microphones."
+              : "Turn on microphone access for T3 Code in Settings to use voice input."}
+          </Text>
+        </>
+      ) : null}
+      <SettingsSection title="Preferred order">
+        {entries.map((entry, index) => {
+          const key = microphoneEntryKey(entry);
+          const shift =
+            dragFrom === -1 || index === dragFrom
+              ? 0
+              : dragFrom < dragTo && index > dragFrom && index <= dragTo
+                ? -rowHeight
+                : dragFrom > dragTo && index < dragFrom && index >= dragTo
+                  ? rowHeight
+                  : 0;
+          return (
+            <MicrophoneRow
+              key={`${key}:${drops}`}
+              entry={entry}
+              position={index + 1}
+              count={entries.length}
+              reorderable={ready}
+              offset={index === dragFrom ? (drag?.translation ?? 0) : shift}
+              lifted={index === dragFrom}
+              onHeight={setRowHeight}
+              onDragStart={() => setDrag({ key, translation: 0 })}
+              onDragMove={(translation) => setDrag({ key, translation })}
+              onDragEnd={(translation, cancelled) => {
+                setDrag(null);
+                setDrops((count) => count + 1);
+                if (!cancelled) move(key, dropSteps(index, translation));
+              }}
+              onStep={(direction) => move(key, direction === "up" ? -1 : 1)}
+              onForget={isMicrophoneDevice(entry) ? () => forget(key) : undefined}
+            />
+          );
+        })}
+      </SettingsSection>
+      <Text className="px-2 text-sm text-foreground-muted">
+        Voice input uses the first connected microphone in this list. A wired or Bluetooth
+        microphone is added by name the first time you dictate with it connected; until then it
+        falls under Other. Swipe left on a named microphone to forget it.
+        {Platform.OS === "android"
+          ? " Android may still use a different microphone if the preferred one can’t be routed."
+          : null}
+      </Text>
+    </>
   );
 }
 
